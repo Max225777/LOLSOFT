@@ -203,6 +203,40 @@ class App(tk.Tk):
 
         self.tree.bind("<Double-1>", self._open_link)
 
+        # Вставка з буфера працює на будь-якій розкладці
+        self._enable_paste(self.token_entry)
+
+    # ── Вставка з буфера (фікс для UA/RU розкладки) ───────────────────────────
+    def _enable_paste(self, entry: tk.Entry):
+        menu = tk.Menu(self, tearoff=0, bg=CARD, fg=TEXT,
+                       activebackground=ACCENT, activeforeground="#ffffff")
+        menu.add_command(label="Вставити",
+                         command=lambda: self._paste_into(entry))
+        menu.add_command(label="Очистити",
+                         command=lambda: entry.delete(0, "end"))
+
+        def popup(e):
+            menu.tk_popup(e.x_root, e.y_root)
+        entry.bind("<Button-3>", popup)
+
+        # Ctrl+V по фізичній клавіші (keycode 86 = V), незалежно від розкладки
+        def ctrl_key(e):
+            if e.keycode in (86, 55) and (e.state & 0x4):
+                self._paste_into(entry)
+                return "break"
+        entry.bind("<Control-KeyPress>", ctrl_key)
+
+    def _paste_into(self, entry: tk.Entry):
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:
+            return
+        try:
+            entry.delete("sel.first", "sel.last")
+        except tk.TclError:
+            pass
+        entry.insert("insert", text.strip())
+
     # ── Дії токена ───────────────────────────────────────────────────────────
     def _toggle_token(self):
         self._show_token = not self._show_token
