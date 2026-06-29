@@ -17,18 +17,18 @@ DEFAULT_URL = (
     "?origin[]=autoreg&origin[]=self_registration&country[]=UA&spam=no"
 )
 
-# ─── Палітра в стилі LOLZ (темна) ───────────────────────────────────────────
-BG       = "#16161a"   # головний фон
-BG2      = "#1d1d22"   # фон таблиці
-CARD     = "#232329"   # картки / поля
-BORDER   = "#2c2c34"
-ACCENT   = "#4f8cff"   # фірмовий синій
-ACCENT_D = "#3b6fd1"
-GREEN    = "#3ddc84"
+# ─── Палітра в стилі LOLZ (темна + лаймовий акцент) ──────────────────────────
+BG       = "#1a1a1a"   # майже чорний фон, як на lolz
+BG2      = "#202020"   # фон таблиці
+CARD     = "#262626"   # картки / поля
+BORDER   = "#333333"
+ACCENT   = "#a8c957"   # фірмовий лаймово-зелений LOLZ
+ACCENT_D = "#8fae42"
+GREEN    = "#a8c957"
 YELLOW   = "#ffc857"
 RED      = "#ff5c5c"
-TEXT     = "#e6e6ec"
-SUBTEXT  = "#8a8a99"
+TEXT     = "#e6e6e6"
+SUBTEXT  = "#888888"
 
 
 def url_to_api(market_url: str) -> str:
@@ -155,7 +155,7 @@ class App(tk.Tk):
 
         self.search_btn = tk.Button(
             url_row, text="  Пошук  ", command=self._start_search,
-            bg=ACCENT, fg="#ffffff", activebackground=ACCENT_D,
+            bg=ACCENT, fg="#1a1a1a", activebackground=ACCENT_D,
             relief="flat", font=("Segoe UI", 10, "bold"),
             padx=8, pady=5, cursor="hand2",
         )
