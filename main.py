@@ -1,249 +1,254 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+import json
+import urllib.parse
 import requests
-from bs4 import BeautifulSoup
 import webbrowser
-from collections import Counter
-import matplotlib
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.patches as mpatches
 
-MY_PROFILE_ID = "9542364"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "uk,en;q=0.9",
-}
+# ─────────────────────────────────────────────────────────────────────────────
+# Налаштування
+# ─────────────────────────────────────────────────────────────────────────────
+MY_PROFILE_ID = "9542364"          # твій user_id на lolz
+API_BASE = "https://prod-api.lzt.market"
 
 DEFAULT_URL = (
     "https://lzt.market/telegram/"
     "?origin[]=autoreg&origin[]=self_registration&country[]=UA&spam=no"
 )
 
-BG       = "#1e1e2e"
-BG2      = "#181825"
-SURFACE  = "#313244"
-ACCENT   = "#89b4fa"
-GREEN    = "#a6e3a1"
-YELLOW   = "#f9e2af"
-TEXT     = "#cdd6f4"
-SUBTEXT  = "#a6adc8"
+# ─── Палітра в стилі LOLZ (темна) ───────────────────────────────────────────
+BG       = "#16161a"   # головний фон
+BG2      = "#1d1d22"   # фон таблиці
+CARD     = "#232329"   # картки / поля
+BORDER   = "#2c2c34"
+ACCENT   = "#4f8cff"   # фірмовий синій
+ACCENT_D = "#3b6fd1"
+GREEN    = "#3ddc84"
+YELLOW   = "#ffc857"
+RED      = "#ff5c5c"
+TEXT     = "#e6e6ec"
+SUBTEXT  = "#8a8a99"
 
 
-def fetch_listings(url: str, count: int = 10) -> list[dict]:
-    resp = requests.get(url, headers=HEADERS, timeout=15)
+def url_to_api(market_url: str) -> str:
+    """Перетворює посилання lzt.market у відповідний ендпоінт API."""
+    parts = urllib.parse.urlsplit(market_url)
+    path = parts.path  # напр. /telegram/
+    query = parts.query
+    api_url = API_BASE + path
+    if query:
+        api_url += "?" + query
+    return api_url
+
+
+def fetch_listings(market_url: str, token: str, count: int = 10) -> list[dict]:
+    """Запит до API lzt.market з Bearer-токеном. Повертає список лотів."""
+    api_url = url_to_api(market_url)
+    headers = {
+        "Authorization": f"Bearer {token.strip()}",
+        "Accept": "application/json",
+        "User-Agent": "LOLSOFT/1.0",
+    }
+    resp = requests.get(api_url, headers=headers, timeout=20)
+    if resp.status_code == 401:
+        raise RuntimeError("Невірний або прострочений API-токен (401).")
     resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+
+    data = resp.json()
+    items = data.get("items", [])
 
     parsed: list[dict] = []
-    for block in soup.select("li[data-item-id], div[data-item-id]")[:count]:
-        item_id = block.get("data-item-id", "")
+    for it in items[:count]:
+        item_id = str(it.get("item_id", ""))
+        title = it.get("title") or it.get("title_en") or f"Лот #{item_id}"
 
-        # title + link
-        title_tag = block.select_one("a.title, a.item-title, h3 a, .accountTitle a")
-        title = title_tag.get_text(strip=True) if title_tag else f"Лот #{item_id}"
-        link = title_tag.get("href", "") if title_tag else ""
-        if link and not link.startswith("http"):
-            link = "https://lzt.market" + link
+        price = it.get("price", "?")
+        currency = it.get("price_currency", "") or it.get("currency", "")
+        price_str = f"{price} {currency}".strip()
 
-        # seller
-        seller_tag = block.select_one("a[href*='/members/'], .seller a, .username a")
-        seller_name = seller_tag.get_text(strip=True) if seller_tag else "?"
-        seller_href = seller_tag.get("href", "") if seller_tag else ""
-        if seller_href and not seller_href.startswith("http"):
-            seller_href = "https://lolz.live" + seller_href
+        seller = it.get("seller") or {}
+        seller_id = str(seller.get("user_id", ""))
+        seller_name = seller.get("username", "?")
 
-        # price
-        price_tag = block.select_one(".price, .cost, [class*='price']")
-        price = price_tag.get_text(strip=True) if price_tag else "?"
+        state = it.get("item_state", "")          # active / sold / closed ...
+        is_closed = state in ("sold", "closed", "deleted")
 
-        # pinned — lzt.market marks sticky/featured items with these classes/attrs
-        classes = " ".join(block.get("class", []))
-        is_pinned = any(k in classes for k in ("sticky", "pinned", "featured", "closed--sticky"))
-        # also check for a pin icon or label inside the block
-        if not is_pinned:
-            pin_tag = block.select_one(
-                ".fa-thumbtack, .fa-pin, [class*='pin'], [class*='sticky'], "
-                "[class*='featured'], [title*='закреп'], [title*='pin']"
-            )
-            is_pinned = pin_tag is not None
+        # деякі категорії віддають прапор закріплення
+        is_pinned = bool(it.get("is_sticky") or it.get("sticky"))
 
-        # closed/sold
-        is_closed = any(k in classes for k in ("closed", "sold", "inactive"))
-        if not is_closed:
-            closed_tag = block.select_one(
-                ".label--closed, .label--sold, [class*='closed'], [class*='sold']"
-            )
-            is_closed = closed_tag is not None
-
-        is_mine = MY_PROFILE_ID in seller_href
+        is_mine = (seller_id == MY_PROFILE_ID)
 
         parsed.append({
             "id": item_id,
             "title": title,
-            "link": link,
+            "link": f"https://lzt.market/{item_id}/",
             "seller": seller_name,
-            "seller_url": seller_href,
-            "price": price,
+            "seller_id": seller_id,
+            "price": price_str,
             "is_mine": is_mine,
             "is_pinned": is_pinned,
             "is_closed": is_closed,
         })
-
-    return parsed[:count]
-
-
-# ── colour palette for sellers in the chart ──────────────────────────────────
-PALETTE = [
-    "#89b4fa", "#a6e3a1", "#f38ba8", "#fab387",
-    "#f9e2af", "#cba6f7", "#94e2d5", "#eba0ac",
-    "#b4befe", "#74c7ec",
-]
+    return parsed
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("LOLZ Market Аналізатор")
-        self.geometry("1200x680")
+        self.title("LOLSOFT — Market Аналізатор")
+        self.geometry("980x620")
         self.configure(bg=BG)
         self._listing_data: list[dict] = []
         self._build_ui()
 
-    # ── UI layout ─────────────────────────────────────────────────────────────
+    # ── UI ──────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # top bar
-        top = tk.Frame(self, bg=BG)
-        top.pack(fill="x", padx=10, pady=8)
+        # Заголовок
+        header = tk.Frame(self, bg=BG)
+        header.pack(fill="x", padx=16, pady=(14, 6))
+        tk.Label(header, text="LOLSOFT", bg=BG, fg=ACCENT,
+                 font=("Segoe UI", 16, "bold")).pack(side="left")
+        tk.Label(header, text="  Market Аналізатор", bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 11)).pack(side="left")
 
-        tk.Label(top, text="URL пошуку:", bg=BG, fg=TEXT,
+        # ── Поле токена ──
+        token_row = tk.Frame(self, bg=BG)
+        token_row.pack(fill="x", padx=16, pady=(4, 2))
+        tk.Label(token_row, text="API-токен:", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
+        self.token_var = tk.StringVar()
+        self.token_entry = tk.Entry(
+            token_row, textvariable=self.token_var, show="•",
+            bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
+            font=("Segoe UI", 10), highlightthickness=1,
+            highlightbackground=BORDER, highlightcolor=ACCENT,
+        )
+        self.token_entry.pack(side="left", fill="x", expand=True, padx=(8, 6), ipady=5)
+        self._show_token = False
+        tk.Button(token_row, text="👁", command=self._toggle_token,
+                  bg=CARD, fg=TEXT, relief="flat", cursor="hand2",
+                  activebackground=BORDER).pack(side="left", padx=(0, 6))
+        tk.Button(token_row, text="Де взяти?", command=self._open_token_help,
+                  bg=CARD, fg=ACCENT, relief="flat", cursor="hand2",
+                  font=("Segoe UI", 9), activebackground=BORDER
+                  ).pack(side="left")
 
+        # ── Поле URL + кнопка ──
+        url_row = tk.Frame(self, bg=BG)
+        url_row.pack(fill="x", padx=16, pady=(6, 2))
+        tk.Label(url_row, text="URL пошуку:", bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 10)).pack(side="left")
         self.url_var = tk.StringVar(value=DEFAULT_URL)
-        tk.Entry(top, textvariable=self.url_var, width=68,
-                 bg=SURFACE, fg=TEXT, insertbackground=TEXT,
-                 relief="flat", font=("Segoe UI", 10)
-                 ).pack(side="left", padx=(6, 6), ipady=4)
+        tk.Entry(url_row, textvariable=self.url_var,
+                 bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
+                 font=("Segoe UI", 10), highlightthickness=1,
+                 highlightbackground=BORDER, highlightcolor=ACCENT,
+                 ).pack(side="left", fill="x", expand=True, padx=(8, 6), ipady=5)
 
-        tk.Label(top, text="Лотів:", bg=BG, fg=SUBTEXT,
+        tk.Label(url_row, text="Лотів:", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
         self.count_var = tk.IntVar(value=10)
-        tk.Spinbox(top, from_=1, to=30, textvariable=self.count_var, width=4,
-                   bg=SURFACE, fg=TEXT, buttonbackground="#45475a",
-                   relief="flat", font=("Segoe UI", 10)
-                   ).pack(side="left", padx=(4, 8))
+        tk.Spinbox(url_row, from_=1, to=50, textvariable=self.count_var, width=4,
+                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                   font=("Segoe UI", 10)).pack(side="left", padx=(4, 8))
 
         self.search_btn = tk.Button(
-            top, text="  Пошук  ", command=self._start_search,
-            bg=ACCENT, fg=BG, activebackground="#74c7ec",
+            url_row, text="  Пошук  ", command=self._start_search,
+            bg=ACCENT, fg="#ffffff", activebackground=ACCENT_D,
             relief="flat", font=("Segoe UI", 10, "bold"),
-            padx=4, pady=4, cursor="hand2",
+            padx=8, pady=5, cursor="hand2",
         )
         self.search_btn.pack(side="left")
 
-        # status line
-        self.status_var = tk.StringVar(value="Введіть URL і натисніть «Пошук»")
+        # ── Статус ──
+        self.status_var = tk.StringVar(value="Введи токен і натисни «Пошук»")
         tk.Label(self, textvariable=self.status_var, bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 9)).pack(anchor="w", padx=12)
+                 font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=18, pady=(6, 2))
 
-        # main split: table left, chart right
-        body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        self._build_table(body)
-        self._build_chart_panel(body)
-
-    def _build_table(self, parent):
-        frame = tk.Frame(parent, bg=BG)
-        frame.pack(side="left", fill="both", expand=True)
+        # ── Таблиця ──
+        table_wrap = tk.Frame(self, bg=BORDER)
+        table_wrap.pack(fill="both", expand=True, padx=16, pady=(4, 16))
 
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("Treeview",
                         background=BG2, foreground=TEXT,
-                        fieldbackground=BG2, rowheight=26,
-                        font=("Segoe UI", 9))
+                        fieldbackground=BG2, rowheight=30, borderwidth=0,
+                        font=("Segoe UI", 10))
         style.configure("Treeview.Heading",
-                        background=SURFACE, foreground=ACCENT,
-                        font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#45475a")])
+                        background=CARD, foreground=ACCENT, relief="flat",
+                        font=("Segoe UI", 10, "bold"))
+        style.map("Treeview",
+                  background=[("selected", "#2f3a52")],
+                  foreground=[("selected", "#ffffff")])
 
-        cols = ("№", "Назва / Лот", "Продавець", "Ціна", "Закріп", "Закрит", "Мій?")
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="browse")
-
-        widths = [28, 340, 150, 80, 60, 60, 55]
+        cols = ("№", "Назва", "Продавець", "Ціна", "📌", "🔒", "Мій")
+        self.tree = ttk.Treeview(table_wrap, columns=cols, show="headings",
+                                 selectmode="browse")
+        widths  = [34, 360, 170, 110, 44, 44, 70]
         anchors = ["center", "w", "w", "center", "center", "center", "center"]
-        for col, w, a in zip(cols, widths, anchors):
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=w, anchor=a)
+        for c, w, a in zip(cols, widths, anchors):
+            self.tree.heading(c, text=c)
+            self.tree.column(c, width=w, anchor=a)
 
-        sb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        sb = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
-        self.tree.pack(side="left", fill="both", expand=True)
+        self.tree.pack(side="left", fill="both", expand=True, padx=1, pady=1)
         sb.pack(side="right", fill="y")
 
-        # row colour tags
-        self.tree.tag_configure("mine",        background="#1b3a28", foreground=GREEN)
-        self.tree.tag_configure("mine_pinned", background="#1b3a28", foreground=YELLOW)
-        self.tree.tag_configure("pinned",      background="#2a2a1a", foreground=YELLOW)
-        self.tree.tag_configure("closed",      background="#2a1a1a", foreground="#585b70")
+        self.tree.tag_configure("mine",        background="#15311f", foreground=GREEN)
+        self.tree.tag_configure("mine_pinned", background="#15311f", foreground=YELLOW)
+        self.tree.tag_configure("pinned",      background="#2b2715", foreground=YELLOW)
+        self.tree.tag_configure("closed",      background="#2b1717", foreground="#6b6b76")
         self.tree.tag_configure("other",       background=BG2,       foreground=TEXT)
 
         self.tree.bind("<Double-1>", self._open_link)
 
-    def _build_chart_panel(self, parent):
-        panel = tk.Frame(parent, bg=BG, width=310)
-        panel.pack(side="right", fill="y", padx=(8, 0))
-        panel.pack_propagate(False)
+    # ── Дії токена ───────────────────────────────────────────────────────────
+    def _toggle_token(self):
+        self._show_token = not self._show_token
+        self.token_entry.config(show="" if self._show_token else "•")
 
-        tk.Label(panel, text="Розподіл лотів по продавцям",
-                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 9)).pack(pady=(4, 0))
+    def _open_token_help(self):
+        webbrowser.open("https://lzt.market/account/api")
+        messagebox.showinfo(
+            "Як отримати токен",
+            "1. Відкрий lzt.market → Налаштування → API\n"
+            "   (відкрив у браузері автоматично)\n"
+            "2. Створи токен з доступом до Market\n"
+            "3. Скопіюй і встав у поле «API-токен»"
+        )
 
-        fig_bg = "#181825"
-        self._fig, self._ax = plt.subplots(figsize=(3.0, 3.0), dpi=90)
-        self._fig.patch.set_facecolor(fig_bg)
-        self._ax.set_facecolor(fig_bg)
-        self._ax.axis("off")
-
-        self._canvas = FigureCanvasTkAgg(self._fig, master=panel)
-        self._canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        # legend frame below chart
-        self._legend_frame = tk.Frame(panel, bg=BG)
-        self._legend_frame.pack(fill="x", padx=4, pady=(0, 4))
-
-    # ── search logic ──────────────────────────────────────────────────────────
+    # ── Пошук ────────────────────────────────────────────────────────────────
     def _start_search(self):
+        if not self.token_var.get().strip():
+            messagebox.showwarning("Немає токена",
+                                   "Спочатку встав API-токен.")
+            return
         self.search_btn.config(state="disabled")
-        self.status_var.set("Завантаження…")
-        for row in self.tree.get_children():
-            self.tree.delete(row)
+        self.status_var.set("Завантаження через API…")
+        for r in self.tree.get_children():
+            self.tree.delete(r)
         self._listing_data = []
         threading.Thread(target=self._do_search, daemon=True).start()
 
     def _do_search(self):
         url = self.url_var.get().strip()
+        token = self.token_var.get().strip()
         count = self.count_var.get()
         try:
-            listings = fetch_listings(url, count)
+            listings = fetch_listings(url, token, count)
             self.after(0, self._populate, listings)
         except Exception as exc:
             self.after(0, self._show_error, str(exc))
 
     def _populate(self, listings: list[dict]):
         self._listing_data = listings
-
         for i, lot in enumerate(listings, 1):
-            pin_mark    = "📌" if lot["is_pinned"] else "—"
-            closed_mark = "🔒" if lot["is_closed"] else "—"
-            mine_mark   = "✓ Мій" if lot["is_mine"] else "—"
+            pin    = "📌" if lot["is_pinned"] else ""
+            closed = "🔒" if lot["is_closed"] else ""
+            mine   = "✓" if lot["is_mine"] else ""
 
             if lot["is_mine"] and lot["is_pinned"]:
                 tag = "mine_pinned"
@@ -258,75 +263,17 @@ class App(tk.Tk):
 
             self.tree.insert("", "end", iid=str(i - 1), tags=(tag,),
                              values=(i, lot["title"], lot["seller"],
-                                     lot["price"], pin_mark, closed_mark, mine_mark))
+                                     lot["price"], pin, closed, mine))
 
-        mine_count   = sum(1 for l in listings if l["is_mine"])
-        pinned_count = sum(1 for l in listings if l["is_pinned"])
-        closed_count = sum(1 for l in listings if l["is_closed"])
-
+        mine_c   = sum(1 for l in listings if l["is_mine"])
+        pinned_c = sum(1 for l in listings if l["is_pinned"])
+        closed_c = sum(1 for l in listings if l["is_closed"])
         self.status_var.set(
-            f"Лотів: {len(listings)}  •  "
-            f"Мої: {mine_count}  •  "
-            f"Закріплені: {pinned_count}  •  "
-            f"Закриті: {closed_count}  •  "
+            f"Лотів: {len(listings)}   •   Мої: {mine_c}   •   "
+            f"Закріплені: {pinned_c}   •   Закриті: {closed_c}   •   "
             f"Подвійний клік → відкрити"
         )
         self.search_btn.config(state="normal")
-        self._update_chart(listings)
-
-    def _update_chart(self, listings: list[dict]):
-        self._ax.clear()
-        self._ax.set_facecolor("#181825")
-
-        for w in self._legend_frame.winfo_children():
-            w.destroy()
-
-        if not listings:
-            self._canvas.draw()
-            return
-
-        counts = Counter(lot["seller"] for lot in listings)
-        sellers = list(counts.keys())
-        values  = [counts[s] for s in sellers]
-        colors  = [PALETTE[i % len(PALETTE)] for i in range(len(sellers))]
-
-        # highlight "mine" slices with a golden edge
-        edge_colors = []
-        edge_widths = []
-        for s in sellers:
-            is_mine = any(l["seller"] == s and l["is_mine"] for l in listings)
-            edge_colors.append(YELLOW if is_mine else "#181825")
-            edge_widths.append(2.5 if is_mine else 0.5)
-
-        wedges, texts, autotexts = self._ax.pie(
-            values,
-            colors=colors,
-            autopct="%1.0f%%",
-            startangle=90,
-            wedgeprops={"linewidth": 1, "edgecolor": "#181825"},
-            textprops={"color": TEXT, "fontsize": 8},
-            pctdistance=0.75,
-        )
-        for wdg, ec, ew in zip(wedges, edge_colors, edge_widths):
-            wdg.set_edgecolor(ec)
-            wdg.set_linewidth(ew)
-
-        self._ax.set_title("", color=TEXT)
-        self._fig.tight_layout(pad=0.5)
-        self._canvas.draw()
-
-        # legend chips below chart
-        for seller, color in zip(sellers, colors):
-            is_mine = any(l["seller"] == seller and l["is_mine"] for l in listings)
-            row = tk.Frame(self._legend_frame, bg=BG)
-            row.pack(anchor="w", pady=1)
-            chip = tk.Label(row, text="  ", bg=color, width=2)
-            chip.pack(side="left", padx=(0, 4))
-            label_text = f"{seller} ({counts[seller]})" + (" ← ВИ" if is_mine else "")
-            fg = YELLOW if is_mine else TEXT
-            tk.Label(row, text=label_text, bg=BG, fg=fg,
-                     font=("Segoe UI", 8, "bold" if is_mine else "normal")
-                     ).pack(side="left")
 
     def _show_error(self, msg: str):
         self.status_var.set(f"Помилка: {msg}")
@@ -338,11 +285,8 @@ class App(tk.Tk):
         if not item:
             return
         lot = self._listing_data[int(item)]
-        url = lot["link"] or f"https://lzt.market/{lot['id']}/"
-        if url:
-            webbrowser.open(url)
+        webbrowser.open(lot["link"])
 
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    App().mainloop()
