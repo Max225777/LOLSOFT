@@ -197,11 +197,9 @@ class App(tk.Tk):
         self.tree.pack(side="left", fill="both", expand=True, padx=1, pady=1)
         sb.pack(side="right", fill="y")
 
-        self.tree.tag_configure("mine",        background="#15311f", foreground=GREEN)
-        self.tree.tag_configure("mine_pinned", background="#15311f", foreground=YELLOW)
-        self.tree.tag_configure("pinned",      background="#2b2715", foreground=YELLOW)
-        self.tree.tag_configure("closed",      background="#2b1717", foreground="#6b6b76")
-        self.tree.tag_configure("other",       background=BG2,       foreground=TEXT)
+        # Тільки два кольори: мої — зелені, чужі — червоні
+        self.tree.tag_configure("mine",  background="#15311f", foreground=GREEN)
+        self.tree.tag_configure("other", background="#2b1717", foreground="#ff8a8a")
 
         self.tree.bind("<Double-1>", self._open_link)
 
@@ -246,20 +244,11 @@ class App(tk.Tk):
     def _populate(self, listings: list[dict]):
         self._listing_data = listings
         for i, lot in enumerate(listings, 1):
-            pin    = "📌" if lot["is_pinned"] else ""
+            pin    = "✅" if lot["is_pinned"] else "⬜"
             closed = "🔒" if lot["is_closed"] else ""
             mine   = "✓" if lot["is_mine"] else ""
 
-            if lot["is_mine"] and lot["is_pinned"]:
-                tag = "mine_pinned"
-            elif lot["is_mine"]:
-                tag = "mine"
-            elif lot["is_pinned"]:
-                tag = "pinned"
-            elif lot["is_closed"]:
-                tag = "closed"
-            else:
-                tag = "other"
+            tag = "mine" if lot["is_mine"] else "other"
 
             self.tree.insert("", "end", iid=str(i - 1), tags=(tag,),
                              values=(i, lot["title"], lot["seller"],
