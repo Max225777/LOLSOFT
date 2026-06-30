@@ -98,46 +98,54 @@ def db_conn() -> sqlite3.Connection:
     return conn
 
 
+# Зберігаємо ids попереднього скану в пам'яті (між запитами в рамках сесії)
+_prev_ids: set[str] = set()
+_first_scan_done: bool = False
+
+
 def record_snapshot(listings: list[dict]) -> list[dict]:
-    """Логує нові підняття. Повертає список нових подій [{seller, title, logged_at}]."""
+    """
+    Порівнює поточний список лотів з попереднім скануванням.
+    Лот якого не було у попередньому скані = він виплив наверх = підняття.
+    Перший скан завжди береться як базова лінія (нічого не логується).
+    """
+    global _prev_ids, _first_scan_done
+
     conn = db_conn()
     now_iso = datetime.now().isoformat(timespec="seconds")
     events = []
 
+    current_ids = {lot["id"] for lot in listings if lot["id"]}
+
+    if not _first_scan_done:
+        # перший скан — просто запам'ятовуємо, нічого не логуємо
+        _prev_ids = current_ids
+        _first_scan_done = True
+        conn.close()
+        return []
+
+    # нові лоти у видачі = піднялись наверх
+    new_ids = current_ids - _prev_ids
+
     for lot in listings:
-        item_id   = lot["id"]
-        bumped_at = lot.get("bumped_at")
-        if not item_id:
+        if lot["id"] not in new_ids:
             continue
-        row = conn.execute(
-            "SELECT bumped_at FROM last_seen WHERE item_id = ?", (item_id,)
-        ).fetchone()
-        prev = row[0] if row else None
-        is_new = bool(bumped_at) and (row is None or bumped_at != prev)
+        conn.execute(
+            "INSERT INTO bumps (item_id, seller_id, seller_name, bumped_at, "
+            "logged_at, is_mine, is_pinned) VALUES (?,?,?,?,?,?,?)",
+            (lot["id"], lot.get("seller_id",""), lot.get("seller","?"),
+             lot.get("bumped_at"), now_iso,
+             int(lot.get("is_mine", False)), int(lot.get("is_pinned", False)))
+        )
+        events.append({
+            "seller":   lot.get("seller", "?"),
+            "title":    lot["title"],
+            "item_id":  lot["id"],
+            "logged_at": now_iso,
+            "is_mine":  lot.get("is_mine", False),
+        })
 
-        if is_new:
-            conn.execute(
-                "INSERT INTO bumps (item_id, seller_id, seller_name, bumped_at, "
-                "logged_at, is_mine, is_pinned) VALUES (?,?,?,?,?,?,?)",
-                (item_id, lot.get("seller_id",""), lot.get("seller","?"),
-                 bumped_at, now_iso,
-                 int(lot.get("is_mine", False)), int(lot.get("is_pinned", False)))
-            )
-            events.append({
-                "seller":    lot.get("seller", "?"),
-                "title":     lot["title"],
-                "item_id":   item_id,
-                "logged_at": now_iso,
-                "is_mine":   lot.get("is_mine", False),
-            })
-
-        if row:
-            conn.execute("UPDATE last_seen SET bumped_at=? WHERE item_id=?",
-                         (bumped_at, item_id))
-        else:
-            conn.execute("INSERT INTO last_seen (item_id, bumped_at) VALUES (?,?)",
-                         (item_id, bumped_at))
-
+    _prev_ids = current_ids
     conn.commit()
     conn.close()
     return events
