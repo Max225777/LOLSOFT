@@ -144,7 +144,7 @@ def record_snapshot(listings: list[dict]) -> int:
             "SELECT bumped_at FROM last_seen WHERE item_id = ?", (item_id,)
         ).fetchone()
         prev_bumped = row[0] if row else None
-        is_new_bump = bool(bumped_at) and bumped_at != prev_bumped
+        is_new_bump = bool(bumped_at) and (row is None or bumped_at != prev_bumped)
 
         if is_new_bump:
             conn.execute(
@@ -432,7 +432,12 @@ class App(tk.Tk):
 
     def _populate(self, listings: list[dict]):
         self._listing_data = listings
-        new_bumps = record_snapshot(listings)
+        try:
+            new_bumps = record_snapshot(listings)
+            db_error = None
+        except Exception as exc:
+            new_bumps = 0
+            db_error = str(exc)
 
         sel = self.tree.focus()
         for r in self.tree.get_children():
@@ -452,12 +457,15 @@ class App(tk.Tk):
         mine_c   = sum(1 for l in listings if l["is_mine"])
         pinned_c = sum(1 for l in listings if l["is_pinned"])
         now      = datetime.now().strftime("%H:%M:%S")
-        self.status_var.set(
+        status = (
             f"Оновлено: {now}   •   Лотів: {len(listings)}   •   "
             f"Мої: {mine_c}   •   Закріплені: {pinned_c}   •   "
             f"Нових підняттів за скан: {new_bumps}   •   "
             f"Подвійний клік → відкрити"
         )
+        if db_error:
+            status += f"   •   ⚠ База статистики: {db_error}"
+        self.status_var.set(status)
         self.search_btn.config(state="normal")
 
         if sel and self.tree.exists(sel):
