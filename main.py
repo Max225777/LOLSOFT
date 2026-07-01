@@ -554,10 +554,12 @@ class App(tk.Tk):
         self.cache_info_var.set(f"Лотів у кеші: {total}  •  оновлено {self._cache_ts}")
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
 
-        # дебаг: якщо є лоти, показуємо структуру тегів першого
+        # дебаг: показуємо структуру тегів першого лота де є теги
         if items:
-            sample_tags = items[0].get("tags", "–")
-            self.cycle_status_var.set(f"Кеш: {total} лотів. Приклад tags[0]: {str(sample_tags)[:80]}")
+            sample = next((it for it in items if it.get("tags")), items[0])
+            raw = str(sample.get("tags", "–"))[:120]
+            self._add_log(f"[DEBUG tags] item_id={sample.get('item_id')} tags={raw}")
+            self.cycle_status_var.set(f"Кеш: {total} лотів • оновлено {self._cache_ts}")
 
         # плануємо наступне авто-оновлення
         if self._cache_job:
