@@ -111,7 +111,7 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
     return sorted(set(tags)), raw
 
 
-def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
+def fetch_all_my_items(token: str) -> list[dict]:
     """Завантажує ВСІ активні лоти юзера через /user/items з пагінацією."""
     result   = []
     seen_ids = set()
@@ -136,33 +136,38 @@ def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
     return result
 
 
-def items_for_tag(cache: list[dict], tag: str) -> list[dict]:
-    """Фільтрує кешовані лоти по тегу (клієнтська фільтрація)."""
-    if not tag.strip():
-        return list(cache)
-    target_id   = _tag_id_map.get(tag.strip())
-    target_name = tag.strip().lower()
-    result = []
-    for it in cache:
-        raw_tags = it.get("tags") or []
-        matched  = False
-        for t in raw_tags:
-            if isinstance(t, dict):
-                tid = t.get("tag_id") or t.get("id")
-                tname = (t.get("title") or t.get("name") or "").lower()
-                if target_id is not None and tid == target_id:
-                    matched = True; break
-                if tname and tname == target_name:
-                    matched = True; break
-            elif isinstance(t, int):
-                if target_id is not None and t == target_id:
-                    matched = True; break
-            elif isinstance(t, str):
-                if t.strip().lower() == target_name:
-                    matched = True; break
-        if matched:
-            result.append(it)
+def fetch_items_by_tag(token: str, tag_id: int) -> list[dict]:
+    """Завантажує лоти конкретного тегу через /user/items?tag_id=X."""
+    result   = []
+    seen_ids = set()
+    page     = 1
+    while page <= 100:
+        url  = f"{API_BASE}/user/items?tag_id={tag_id}&page={page}"
+        resp = requests.get(url, headers=_headers(token), timeout=30)
+        resp.raise_for_status()
+        items = resp.json().get("items", [])
+        if not items:
+            break
+        added = 0
+        for it in items:
+            iid = it.get("item_id")
+            if iid not in seen_ids:
+                seen_ids.add(iid)
+                result.append(it)
+                added += 1
+        if added == 0:
+            break
+        page += 1
     return result
+
+
+# кеш по тегах: {tag_name: [items]}
+_tag_items_cache: dict[str, list[dict]] = {}
+
+
+def items_for_tag(cache: list[dict], tag: str) -> list[dict]:
+    """Повертає лоти для тегу з tag-кешу."""
+    return list(_tag_items_cache.get(tag.strip(), []))
 
 
 def item_title(it: dict) -> str:
@@ -537,12 +542,18 @@ class App(tk.Tk):
         threading.Thread(target=self._do_load_items, args=(token,), daemon=True).start()
 
     def _do_load_items(self, token: str):
+        global _tag_items_cache
         try:
-            # заразом завантажуємо і теги якщо ще не завантажені
             if not _tag_id_map:
                 fetch_my_tags(token)
-            items = fetch_all_my_items(token)
-            self.after(0, self._apply_items_cache, items)
+            # завантажуємо всі лоти (для загального кешу)
+            all_items = fetch_all_my_items(token)
+            # завантажуємо лоти окремо по кожному тегу
+            tag_cache: dict[str, list[dict]] = {}
+            for tag_name, tag_id in _tag_id_map.items():
+                tag_cache[tag_name] = fetch_items_by_tag(token, tag_id)
+            _tag_items_cache = tag_cache
+            self.after(0, self._apply_items_cache, all_items)
         except Exception as exc:
             self.after(0, self._cache_error, str(exc))
 
@@ -551,17 +562,14 @@ class App(tk.Tk):
         self._cache_ts    = datetime.now().strftime("%H:%M:%S")
         total = len(items)
 
-        # підраховуємо лоти по тегах і оновлюємо лічильники
         self._update_all_tag_counts()
 
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
-        self._add_log(f"📦 Кеш оновлено: {total} лотів [{self._cache_ts}]")
-        # одноразовий debug: показуємо теги першого лота де є теги
-        sample = next((it for it in items if it.get("tags")), None)
-        if sample:
-            self._add_log(f"[tags структура]: {str(sample.get('tags'))[:150]}")
+        tag_counts = ", ".join(
+            f"{n}:{len(v)}" for n, v in _tag_items_cache.items() if v
+        )
+        self._add_log(f"📦 Кеш: {total} лотів [{self._cache_ts}]  теги: {tag_counts or '—'}")
 
-        # плануємо наступне авто-оновлення
         if self._cache_job:
             self.after_cancel(self._cache_job)
         self._cache_job = self.after(CACHE_REFRESH, self._auto_refresh_cache)
@@ -704,18 +712,20 @@ class App(tk.Tk):
             return
 
         # якщо кеш порожній — завантажуємо
-        if not self._items_cache:
+        if not _tag_items_cache:
             try:
                 if not _tag_id_map:
                     fetch_my_tags(token)
-                items = fetch_all_my_items(token)
-                self.after(0, self._apply_items_cache, items)
-                cache = items
+                all_items = fetch_all_my_items(token)
+                tag_cache: dict[str, list[dict]] = {}
+                for tag_name, tag_id in _tag_id_map.items():
+                    tag_cache[tag_name] = fetch_items_by_tag(token, tag_id)
+                global _tag_items_cache
+                _tag_items_cache = tag_cache
+                self.after(0, self._apply_items_cache, all_items)
             except Exception as exc:
                 self.after(0, self._add_log, f"⚠ Не вдалось завантажити лоти: {exc}")
                 return
-        else:
-            cache = self._items_cache
 
         if self._cycle_tag_idx >= len(active_tags):
             self._cycle_tag_idx    = 0
@@ -726,8 +736,7 @@ class App(tk.Tk):
         self.after(0, self._add_log,
                    f"▶ Крок: «{tag}» {self._cycle_done_count+1}/{bumps_needed}  [{now_str}]")
 
-        # фільтруємо по тегу з кешу
-        my_items = items_for_tag(cache, tag)
+        my_items = items_for_tag(self._items_cache, tag)
 
         if not my_items:
             line = f"⚠ [{tag}] лоти не знайдено в кеші  {now_str}"
