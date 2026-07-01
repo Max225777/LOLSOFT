@@ -116,16 +116,8 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
 
 
 def fetch_my_listings(token: str, tag: str) -> list[str]:
-    """Повертає item_id активних лотів строго з вказаним тегом (по tag_id)."""
-    params = f"user_id={MY_PROFILE_ID}&status=active"
-    if tag.strip():
-        tag_id = _tag_id_map.get(tag.strip())
-        if tag_id is not None:
-            params += f"&tag_id={tag_id}"
-        else:
-            # tag_id невідомий — не можна фільтрувати безпечно, повертаємо пусто
-            raise RuntimeError(f"Тег «{tag}» не знайдено в завантажених тегах. Натисни 🔄")
-    url = f"{API_BASE}/?{params}"
+    """Завантажує ВСІ мої активні лоти і фільтрує клієнтськи по тегу."""
+    url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
@@ -134,7 +126,31 @@ def fetch_my_listings(token: str, tag: str) -> list[str]:
     resp = requests.get(url, headers=headers, timeout=20)
     resp.raise_for_status()
     items = resp.json().get("items", [])
-    return [str(it.get("item_id", "")) for it in items if it.get("item_id")]
+
+    if not tag.strip():
+        return [str(it["item_id"]) for it in items if it.get("item_id")]
+
+    target_id  = _tag_id_map.get(tag.strip())
+    target_name = tag.strip().lower()
+    result = []
+    for it in items:
+        if not it.get("item_id"):
+            continue
+        matched = False
+        for t in (it.get("tags") or []):
+            if isinstance(t, dict):
+                # перевіряємо по tag_id або по title/name
+                if target_id is not None and t.get("tag_id") == target_id:
+                    matched = True
+                elif (t.get("title") or t.get("name") or "").lower() == target_name:
+                    matched = True
+            elif isinstance(t, str) and t.strip().lower() == target_name:
+                matched = True
+            if matched:
+                break
+        if matched:
+            result.append(str(it["item_id"]))
+    return result
 
 
 def fetch_item_title(token: str, item_id: str) -> str:
