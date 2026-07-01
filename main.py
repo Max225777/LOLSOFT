@@ -545,13 +545,19 @@ class App(tk.Tk):
         global _tag_items_cache
         try:
             if not _tag_id_map:
+                self.after(0, lambda: self.load_items_btn.config(text="Завантаження тегів…"))
                 fetch_my_tags(token)
-            # завантажуємо всі лоти (для загального кешу)
+
+            self.after(0, lambda: self.load_items_btn.config(text="Завантаження лотів…"))
             all_items = fetch_all_my_items(token)
-            # завантажуємо лоти окремо по кожному тегу
+
             tag_cache: dict[str, list[dict]] = {}
-            for tag_name, tag_id in _tag_id_map.items():
+            total_tags = len(_tag_id_map)
+            for i, (tag_name, tag_id) in enumerate(_tag_id_map.items(), 1):
+                self.after(0, lambda i=i, n=tag_name: self.load_items_btn.config(
+                    text=f"Тег {i}/{total_tags}: {n[:15]}…"))
                 tag_cache[tag_name] = fetch_items_by_tag(token, tag_id)
+
             _tag_items_cache = tag_cache
             self.after(0, self._apply_items_cache, all_items)
         except Exception as exc:
