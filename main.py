@@ -832,11 +832,12 @@ class App(tk.Tk):
 
         # пробуємо лоти по черзі; при кулдауні — 3 сек пауза і наступний
         # за один крок не більше MAX_TRIES спроб щоб не зависнути надовго
-        MAX_TRIES  = 10
-        total      = len(my_items)
-        idx        = self._tag_bump_idx.get(tag, 0) % total
-        bumped_id  = None
-        tried      = 0
+        MAX_TRIES    = 10
+        total        = len(my_items)
+        idx          = self._tag_bump_idx.get(tag, 0) % total
+        bumped_id    = None
+        tried        = 0
+        limit_streak = 0
         import time
 
         while tried < MAX_TRIES:
@@ -861,11 +862,16 @@ class App(tk.Tk):
                 my_items = items_for_tag(self._items_cache, tag)
                 total = len(my_items)
                 self._add_log(f"🗑 [{tag}] {title} — {reason}  {now_str}")
+                limit_streak = 0
                 if total == 0:
                     break
                 idx = idx % total
             elif reason.startswith("ліміт"):
-                self._add_log(f"🚫 [{tag}] {title} — {reason}  {now_str}")
+                limit_streak += 1
+                if limit_streak >= min(total, MAX_TRIES):
+                    self._add_log(f"🚫 [{tag}] ліміт вичерпано на всіх лотах  {now_str}")
+                    self.after(0, self.bump_status_var.set, f"🚫 «{tag}» ліміт вичерпано")
+                    break
                 idx = (idx + 1) % total
                 self._tag_bump_idx[tag] = idx
             elif reason.startswith("кулдаун"):
