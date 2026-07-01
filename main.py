@@ -27,12 +27,13 @@ GREEN   = "#a8c957"
 TEXT    = "#e6e6e6"
 SUBTEXT = "#888888"
 RED_FG  = "#ff8a8a"
+YELLOW  = "#ffc857"
 
 
-# ─── API ──────────────────────────────────────────────────────────────────────
+# ─── API: отримати лоти ───────────────────────────────────────────────────────
 def url_to_api(url: str) -> str:
     p = urllib.parse.urlsplit(url)
-    return (API_BASE + p.path + ("?" + p.query if p.query else ""))
+    return API_BASE + p.path + ("?" + p.query if p.query else "")
 
 
 def fmt_time(ts) -> str:
@@ -82,6 +83,38 @@ def fetch_listings(market_url: str, token: str, count: int) -> list[dict]:
     return parsed
 
 
+def fetch_my_listings(token: str, tag: str) -> list[dict]:
+    """Отримує МОЇ активні лоти (з фільтром по тегу якщо вказано)."""
+    params = f"user_id={MY_PROFILE_ID}&status=active"
+    if tag.strip():
+        params += f"&tag={urllib.parse.quote(tag.strip())}"
+    url = f"{API_BASE}/items?{params}"
+    headers = {
+        "Authorization": f"Bearer {token.strip()}",
+        "Accept": "application/json",
+        "User-Agent": "LOLSOFT/1.0",
+    }
+    resp = requests.get(url, headers=headers, timeout=20)
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    return [str(it.get("item_id", "")) for it in items if it.get("item_id")]
+
+
+def bump_item(token: str, item_id: str) -> bool:
+    """Підіймає лот через API. Повертає True якщо успішно."""
+    url = f"{API_BASE}/{item_id}/bump"
+    headers = {
+        "Authorization": f"Bearer {token.strip()}",
+        "Accept": "application/json",
+        "User-Agent": "LOLSOFT/1.0",
+    }
+    try:
+        resp = requests.post(url, headers=headers, timeout=15)
+        return resp.status_code in (200, 201)
+    except Exception:
+        return False
+
+
 # ─── SQLite ───────────────────────────────────────────────────────────────────
 def db_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -89,60 +122,60 @@ def db_conn() -> sqlite3.Connection:
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         item_id TEXT, seller_id TEXT, seller_name TEXT,
         bumped_at INTEGER, logged_at TEXT,
-        is_mine INTEGER, is_pinned INTEGER
+        is_mine INTEGER, is_pinned INTEGER,
+        auto_bumped INTEGER DEFAULT 0
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS last_seen (
         item_id TEXT PRIMARY KEY, bumped_at INTEGER
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logged ON bumps(logged_at)")
+    # міграція: додаємо колонку якщо старий DB
+    try:
+        conn.execute("ALTER TABLE bumps ADD COLUMN auto_bumped INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
     return conn
 
 
-# Зберігаємо ids попереднього скану в пам'яті (між запитами в рамках сесії)
 _prev_ids: set[str] = set()
 _first_scan_done: bool = False
 
 
-def record_snapshot(listings: list[dict]) -> list[dict]:
-    """
-    Порівнює поточний список лотів з попереднім скануванням.
-    Лот якого не було у попередньому скані = він виплив наверх = підняття.
-    Перший скан завжди береться як базова лінія (нічого не логується).
-    """
+def record_snapshot(listings: list[dict], auto_bumped_ids: set[str] = None) -> list[dict]:
     global _prev_ids, _first_scan_done
+    auto_bumped_ids = auto_bumped_ids or set()
 
     conn = db_conn()
     now_iso = datetime.now().isoformat(timespec="seconds")
     events = []
-
     current_ids = {lot["id"] for lot in listings if lot["id"]}
 
     if not _first_scan_done:
-        # перший скан — просто запам'ятовуємо, нічого не логуємо
         _prev_ids = current_ids
         _first_scan_done = True
         conn.close()
         return []
 
-    # нові лоти у видачі = піднялись наверх
     new_ids = current_ids - _prev_ids
-
     for lot in listings:
         if lot["id"] not in new_ids:
             continue
         conn.execute(
             "INSERT INTO bumps (item_id, seller_id, seller_name, bumped_at, "
-            "logged_at, is_mine, is_pinned) VALUES (?,?,?,?,?,?,?)",
+            "logged_at, is_mine, is_pinned, auto_bumped) VALUES (?,?,?,?,?,?,?,?)",
             (lot["id"], lot.get("seller_id",""), lot.get("seller","?"),
              lot.get("bumped_at"), now_iso,
-             int(lot.get("is_mine", False)), int(lot.get("is_pinned", False)))
+             int(lot.get("is_mine", False)), int(lot.get("is_pinned", False)),
+             int(lot["id"] in auto_bumped_ids))
         )
         events.append({
-            "seller":   lot.get("seller", "?"),
-            "title":    lot["title"],
-            "item_id":  lot["id"],
-            "logged_at": now_iso,
-            "is_mine":  lot.get("is_mine", False),
+            "seller":      lot.get("seller", "?"),
+            "title":       lot["title"],
+            "item_id":     lot["id"],
+            "logged_at":   now_iso,
+            "is_mine":     lot.get("is_mine", False),
+            "auto_bumped": lot["id"] in auto_bumped_ids,
         })
 
     _prev_ids = current_ids
@@ -152,28 +185,32 @@ def record_snapshot(listings: list[dict]) -> list[dict]:
 
 
 def today_iso() -> str:
-    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0
-                                  ).isoformat(timespec="seconds")
+    return datetime.now().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat(timespec="seconds")
 
 
 def stat_summary() -> dict:
     conn = db_conn()
     t = today_iso()
-    total_all   = conn.execute("SELECT COUNT(*) FROM bumps").fetchone()[0]
-    total_today = conn.execute("SELECT COUNT(*) FROM bumps WHERE logged_at>=?", (t,)).fetchone()[0]
-    my_today    = conn.execute(
-        "SELECT COUNT(*) FROM bumps WHERE is_mine=1 AND logged_at>=?", (t,)
-    ).fetchone()[0]
-    sellers     = conn.execute(
-        "SELECT seller_name, COUNT(*), MAX(is_mine) FROM bumps WHERE logged_at>=? "
-        "GROUP BY seller_id ORDER BY COUNT(*) DESC", (t,)
+    total_all    = conn.execute("SELECT COUNT(*) FROM bumps").fetchone()[0]
+    total_today  = conn.execute(
+        "SELECT COUNT(*) FROM bumps WHERE logged_at>=?", (t,)).fetchone()[0]
+    my_today     = conn.execute(
+        "SELECT COUNT(*) FROM bumps WHERE is_mine=1 AND logged_at>=?", (t,)).fetchone()[0]
+    auto_today   = conn.execute(
+        "SELECT COUNT(*) FROM bumps WHERE auto_bumped=1 AND logged_at>=?", (t,)).fetchone()[0]
+    sellers      = conn.execute(
+        "SELECT seller_name, COUNT(*), MAX(is_mine) FROM bumps "
+        "WHERE logged_at>=? GROUP BY seller_id ORDER BY COUNT(*) DESC", (t,)
     ).fetchall()
     conn.close()
     return {
-        "total_all":    total_all,
-        "total_today":  total_today,
-        "my_today":     my_today,
-        "sellers":      sellers,  # [(name, count, is_mine)]
+        "total_all":   total_all,
+        "total_today": total_today,
+        "my_today":    my_today,
+        "auto_today":  auto_today,
+        "sellers":     sellers,
     }
 
 
@@ -182,16 +219,18 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("LOLSOFT — Market Аналізатор")
-        self.geometry("1120x780")
+        self.geometry("1120x760")
         self.configure(bg=BG)
         self._listing_data: list[dict] = []
-        self._auto_job   = None
-        self._show_token = False
+        self._auto_job    = None
+        self._show_token  = False
+        self._bump_count  = 0        # підняттів зроблено скриптом за сесію
+        self._last_auto_bumped: set[str] = set()
         self._build_ui()
 
     # ── Layout ────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # ── Шапка ──
+        # Шапка
         hdr = tk.Frame(self, bg=BG)
         hdr.pack(fill="x", padx=16, pady=(12, 4))
         tk.Label(hdr, text="LOLSOFT", bg=BG, fg=ACCENT,
@@ -199,10 +238,10 @@ class App(tk.Tk):
         tk.Label(hdr, text="  Market Аналізатор", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
 
-        # ── Токен ──
+        # Токен
         tr = tk.Frame(self, bg=BG)
         tr.pack(fill="x", padx=16, pady=(2, 2))
-        tk.Label(tr, text="API-токен:", bg=BG, fg=SUBTEXT,
+        tk.Label(tr, text="Токен:", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
         self.token_var = tk.StringVar()
         self.token_entry = tk.Entry(
@@ -211,15 +250,16 @@ class App(tk.Tk):
             font=("Segoe UI", 10), highlightthickness=1,
             highlightbackground=BORDER, highlightcolor=ACCENT,
         )
-        self.token_entry.pack(side="left", fill="x", expand=True, padx=(8,6), ipady=4)
+        self.token_entry.pack(side="left", fill="x", expand=True, padx=(6, 6), ipady=4)
         tk.Button(tr, text="👁", command=self._toggle_token,
                   bg=CARD, fg=TEXT, relief="flat", cursor="hand2",
-                  activebackground=BORDER).pack(side="left", padx=(0,6))
-        tk.Button(tr, text="Де взяти?", command=lambda: webbrowser.open("https://lzt.market/account/api"),
+                  activebackground=BORDER).pack(side="left", padx=(0, 6))
+        tk.Button(tr, text="Де взяти?",
+                  command=lambda: webbrowser.open("https://lzt.market/account/api"),
                   bg=CARD, fg=ACCENT, relief="flat", cursor="hand2",
                   font=("Segoe UI", 9), activebackground=BORDER).pack(side="left")
 
-        # ── URL + налаштування ──
+        # URL + лоти + авто-скан
         ur = tk.Frame(self, bg=BG)
         ur.pack(fill="x", padx=16, pady=(4, 2))
         tk.Label(ur, text="URL:", bg=BG, fg=SUBTEXT,
@@ -229,30 +269,28 @@ class App(tk.Tk):
                  bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
                  font=("Segoe UI", 10), highlightthickness=1,
                  highlightbackground=BORDER, highlightcolor=ACCENT,
-                 ).pack(side="left", fill="x", expand=True, padx=(8,6), ipady=4)
-
+                 ).pack(side="left", fill="x", expand=True, padx=(6, 6), ipady=4)
         tk.Label(ur, text="Лотів:", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
         self.count_var = tk.IntVar(value=10)
         tk.Spinbox(ur, from_=1, to=50, textvariable=self.count_var, width=4,
                    bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
-                   font=("Segoe UI", 10)).pack(side="left", padx=(4,8))
-
+                   font=("Segoe UI", 10)).pack(side="left", padx=(4, 8))
         tk.Label(ur, text="Авто:", bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 10)).pack(side="left")
-        self.interval_var = tk.IntVar(value=30)
+        self.interval_var = tk.IntVar(value=60)
         tk.Spinbox(ur, from_=10, to=3600, textvariable=self.interval_var, width=5,
                    bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
-                   font=("Segoe UI", 10)).pack(side="left", padx=(4,2))
+                   font=("Segoe UI", 10)).pack(side="left", padx=(4, 2))
         tk.Label(ur, text="сек", bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 10)).pack(side="left", padx=(0,8))
+                 font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
         self.auto_var = tk.BooleanVar(value=False)
         tk.Checkbutton(ur, text="Вкл", variable=self.auto_var,
                        command=self._toggle_auto,
                        bg=BG, fg=SUBTEXT, selectcolor=CARD,
                        activebackground=BG, activeforeground=ACCENT,
                        font=("Segoe UI", 10), cursor="hand2",
-                       ).pack(side="left", padx=(0,8))
+                       ).pack(side="left", padx=(0, 8))
         self.search_btn = tk.Button(
             ur, text="  Пошук  ", command=self._start_search,
             bg=ACCENT, fg="#1a1a1a", activebackground=ACCENT_D,
@@ -261,31 +299,67 @@ class App(tk.Tk):
         )
         self.search_btn.pack(side="left")
 
-        # ── Статус ──
+        # Авто-підняття
+        bump_row = tk.Frame(self, bg=BG)
+        bump_row.pack(fill="x", padx=16, pady=(4, 2))
+
+        self.autobump_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            bump_row, text="Авто-підняття", variable=self.autobump_var,
+            bg=BG, fg=YELLOW, selectcolor=CARD,
+            activebackground=BG, activeforeground=YELLOW,
+            font=("Segoe UI", 10, "bold"), cursor="hand2",
+        ).pack(side="left", padx=(0, 12))
+
+        tk.Label(bump_row, text="Тег лотів для підняття:", bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 10)).pack(side="left")
+        self.tag_var = tk.StringVar(value="")
+        tk.Entry(bump_row, textvariable=self.tag_var, width=18,
+                 bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
+                 font=("Segoe UI", 10), highlightthickness=1,
+                 highlightbackground=BORDER, highlightcolor=ACCENT,
+                 ).pack(side="left", padx=(6, 12), ipady=4)
+
+        tk.Label(bump_row, text="Мої лоти в топ:", bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 10)).pack(side="left")
+        self.top_n_var = tk.IntVar(value=3)
+        tk.Spinbox(bump_row, from_=1, to=20, textvariable=self.top_n_var, width=4,
+                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                   font=("Segoe UI", 10)).pack(side="left", padx=(4, 12))
+
+        self.bump_count_var = tk.StringVar(value="Підняттів скриптом: 0")
+        tk.Label(bump_row, textvariable=self.bump_count_var, bg=BG, fg=YELLOW,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 12))
+
+        self.bump_status_var = tk.StringVar(value="")
+        tk.Label(bump_row, textvariable=self.bump_status_var, bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 9)).pack(side="left")
+
+        # Статус
         self.status_var = tk.StringVar(value="Введи токен і натисни «Пошук»")
         tk.Label(self, textvariable=self.status_var, bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=18, pady=(4,2))
+                 font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=18, pady=(4, 2))
 
-        # ── Основний PanedWindow: таблиця зверху, низ знизу ──
+        # ── PanedWindow: велика таблиця зверху, статистика знизу ──
         paned = tk.PanedWindow(self, orient=tk.VERTICAL, bg=BG,
-                               sashwidth=6, sashrelief="flat")
-        paned.pack(fill="both", expand=True, padx=10, pady=(0,10))
+                               sashwidth=5, sashrelief="flat")
+        paned.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        # ── Таблиця лотів ──
+        # Таблиця лотів (2/3 висоти)
         top_frame = tk.Frame(paned, bg=BORDER)
-        paned.add(top_frame, minsize=220)
+        paned.add(top_frame, minsize=300)
 
         style = ttk.Style(self)
         style.theme_use("clam")
         style.configure("Treeview",
                         background=BG2, foreground=TEXT,
-                        fieldbackground=BG2, rowheight=28, borderwidth=0,
+                        fieldbackground=BG2, rowheight=30, borderwidth=0,
                         font=("Segoe UI", 10))
         style.configure("Treeview.Heading",
                         background=CARD, foreground=ACCENT, relief="flat",
                         font=("Segoe UI", 10, "bold"))
-        style.map("Treeview", background=[("selected","#2f3a52")],
-                              foreground=[("selected","#ffffff")])
+        style.map("Treeview", background=[("selected", "#2f3a52")],
+                              foreground=[("selected", "#ffffff")])
         style.configure("Stats.Treeview",
                         background=BG2, foreground=TEXT,
                         fieldbackground=BG2, rowheight=24, borderwidth=0,
@@ -294,11 +368,11 @@ class App(tk.Tk):
                         background=CARD, foreground=ACCENT, relief="flat",
                         font=("Segoe UI", 9, "bold"))
 
-        cols = ("№","Назва","Продавець","Ціна","📌","🔒","Піднято","Мій")
+        cols = ("№", "Назва", "Продавець", "Ціна", "📌", "🔒", "Піднято", "Мій")
         self.tree = ttk.Treeview(top_frame, columns=cols,
                                  show="headings", selectmode="browse")
         for c, w, a in zip(cols,
-                           [30, 300, 155, 95, 38, 38, 105, 50],
+                           [32, 320, 160, 100, 38, 38, 110, 50],
                            ["center","w","w","center","center","center","center","center"]):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=w, anchor=a)
@@ -306,32 +380,26 @@ class App(tk.Tk):
         self.tree.configure(yscrollcommand=sb1.set)
         self.tree.pack(side="left", fill="both", expand=True, padx=1, pady=1)
         sb1.pack(side="right", fill="y")
-        self.tree.tag_configure("mine",  background="#15311f", foreground=GREEN)
-        self.tree.tag_configure("other", background="#2b1717", foreground=RED_FG)
+        self.tree.tag_configure("mine",      background="#15311f", foreground=GREEN)
+        self.tree.tag_configure("mine_bump", background="#15311f", foreground=YELLOW)
+        self.tree.tag_configure("other",     background="#2b1717", foreground=RED_FG)
         self.tree.bind("<Double-1>", self._open_link)
 
-        # ── Нижня панель: статистика + лог ──
+        # Статистика (1/3 висоти)
         bot_frame = tk.Frame(paned, bg=BG)
-        paned.add(bot_frame, minsize=180)
-
-        # Ліва половина — статистика продавців
-        left = tk.Frame(bot_frame, bg=BG)
-        left.pack(side="left", fill="both", expand=True, padx=(0,4))
-
-        tk.Label(left, text="Статистика підняттів (сьогодні)", bg=BG, fg=ACCENT,
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=4, pady=(4,2))
+        paned.add(bot_frame, minsize=130)
 
         self.stat_summary_var = tk.StringVar(value="—")
-        tk.Label(left, textvariable=self.stat_summary_var, bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 8), anchor="w", justify="left"
-                 ).pack(anchor="w", padx=4)
+        tk.Label(bot_frame, textvariable=self.stat_summary_var,
+                 bg=BG, fg=TEXT, font=("Segoe UI", 9), anchor="w", justify="left"
+                 ).pack(anchor="w", padx=8, pady=(4, 4))
 
-        stat_wrap = tk.Frame(left, bg=BORDER)
-        stat_wrap.pack(fill="both", expand=True, padx=4, pady=(4,4))
-        scols = ("Продавець","Підняттів сьогодні","Всього")
+        stat_wrap = tk.Frame(bot_frame, bg=BORDER)
+        stat_wrap.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        scols = ("Продавець", "Підняттів сьогодні", "Всього в базі", "Мій")
         self.stat_tree = ttk.Treeview(stat_wrap, columns=scols,
-                                      show="headings", style="Stats.Treeview", height=6)
-        for c, w in zip(scols, [170, 130, 80]):
+                                      show="headings", style="Stats.Treeview")
+        for c, w in zip(scols, [200, 150, 120, 50]):
             self.stat_tree.heading(c, text=c)
             self.stat_tree.column(c, width=w,
                                   anchor="w" if c == "Продавець" else "center")
@@ -341,35 +409,9 @@ class App(tk.Tk):
         sb2.pack(side="right", fill="y")
         self.stat_tree.tag_configure("mine", background="#15311f", foreground=GREEN)
 
-        # Права половина — лог підняттів
-        right = tk.Frame(bot_frame, bg=BG)
-        right.pack(side="right", fill="both", expand=True)
-
-        tk.Label(right, text="Лог підняттів", bg=BG, fg=ACCENT,
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=4, pady=(4,2))
-
-        log_wrap = tk.Frame(right, bg=BORDER)
-        log_wrap.pack(fill="both", expand=True, padx=(0,4), pady=(0,4))
-        self.log_text = tk.Text(
-            log_wrap, bg=BG2, fg=TEXT,
-            font=("Consolas", 9), relief="flat",
-            state="disabled", wrap="word",
-            highlightthickness=0,
-        )
-        sb3 = ttk.Scrollbar(log_wrap, orient="vertical", command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=sb3.set)
-        self.log_text.pack(side="left", fill="both", expand=True, padx=1, pady=1)
-        sb3.pack(side="right", fill="y")
-
-        # теги кольору для логу
-        self.log_text.tag_configure("mine",   foreground=GREEN)
-        self.log_text.tag_configure("other",  foreground=SUBTEXT)
-        self.log_text.tag_configure("seller", foreground=ACCENT)
-        self.log_text.tag_configure("time",   foreground="#555566")
-
         self._enable_paste(self.token_entry)
 
-    # ── Вставка з буфера ─────────────────────────────────────────────────────
+    # ── Пасте + токен ────────────────────────────────────────────────────────
     def _enable_paste(self, entry: tk.Entry):
         menu = tk.Menu(self, tearoff=0, bg=CARD, fg=TEXT,
                        activebackground=ACCENT, activeforeground="#1a1a1a")
@@ -397,7 +439,7 @@ class App(tk.Tk):
         self._show_token = not self._show_token
         self.token_entry.config(show="" if self._show_token else "•")
 
-    # ── Автооновлення ────────────────────────────────────────────────────────
+    # ── Авто-скан ────────────────────────────────────────────────────────────
     def _toggle_auto(self):
         if self.auto_var.get():
             self._schedule_auto()
@@ -406,7 +448,9 @@ class App(tk.Tk):
             self._auto_job = None
 
     def _schedule_auto(self):
-        self._auto_job = self.after(max(10, self.interval_var.get()) * 1000, self._auto_tick)
+        self._auto_job = self.after(
+            max(10, self.interval_var.get()) * 1000, self._auto_tick
+        )
 
     def _auto_tick(self):
         if self.auto_var.get():
@@ -434,67 +478,106 @@ class App(tk.Tk):
         except Exception as exc:
             self.after(0, self._show_error, str(exc))
 
+    # ── Авто-підняття ────────────────────────────────────────────────────────
+    def _do_auto_bump(self, listings: list[dict]):
+        """Перевіряє чи мої лоти в топ-N. Якщо ні — піднімає через API."""
+        token  = self.token_var.get().strip()
+        tag    = self.tag_var.get().strip()
+        top_n  = self.top_n_var.get()
+
+        # скільки моїх зараз у топ-N
+        top_n_lots = listings[:top_n]
+        my_in_top  = [l for l in top_n_lots if l["is_mine"]]
+
+        if my_in_top:
+            self.after(0, self.bump_status_var.set,
+                       f"✓ Твої лоти в топ-{top_n}: {len(my_in_top)} шт")
+            return
+
+        # мої лоти відсутні у топ-N — отримуємо мої лоти і піднімаємо
+        self.after(0, self.bump_status_var.set, "Піднімаю…")
+        try:
+            my_ids = fetch_my_listings(token, tag)
+        except Exception as exc:
+            self.after(0, self.bump_status_var.set, f"⚠ Не вдалось отримати мої лоти: {exc}")
+            return
+
+        if not my_ids:
+            self.after(0, self.bump_status_var.set,
+                       f"Мої лоти з тегом «{tag}» не знайдено")
+            return
+
+        bumped_ids = set()
+        for item_id in my_ids:
+            ok = bump_item(token, item_id)
+            if ok:
+                bumped_ids.add(item_id)
+                self._bump_count += 1
+
+        self._last_auto_bumped = bumped_ids
+
+        self.after(0, self.bump_count_var.set,
+                   f"Підняттів скриптом: {self._bump_count}")
+
+        if bumped_ids:
+            self.after(0, self.bump_status_var.set,
+                       f"↑ Підняв {len(bumped_ids)} лот(ів) о {datetime.now().strftime('%H:%M:%S')}")
+        else:
+            self.after(0, self.bump_status_var.set,
+                       "⚠ Жоден лот не вдалось підняти (помилка API або кулдаун)")
+
+    # ── Populate ─────────────────────────────────────────────────────────────
     def _populate(self, listings: list[dict]):
         self._listing_data = listings
 
+        # авто-підняття в окремому потоці щоб не блокувати UI
+        if self.autobump_var.get():
+            threading.Thread(
+                target=self._do_auto_bump, args=(listings,), daemon=True
+            ).start()
+
         try:
-            events = record_snapshot(listings)
-            db_err = None
+            events = record_snapshot(listings, self._last_auto_bumped)
         except Exception as exc:
             events = []
-            db_err = str(exc)
+            self.status_var.set(f"⚠ База статистики: {exc}")
 
         sel = self.tree.focus()
         for r in self.tree.get_children():
             self.tree.delete(r)
 
         for i, lot in enumerate(listings, 1):
-            self.tree.insert("", "end", iid=str(i-1),
-                             tags=("mine" if lot["is_mine"] else "other",),
+            is_mine     = lot["is_mine"]
+            auto_bumped = lot["id"] in self._last_auto_bumped
+            if is_mine and auto_bumped:
+                tag = "mine_bump"
+            elif is_mine:
+                tag = "mine"
+            else:
+                tag = "other"
+
+            self.tree.insert("", "end", iid=str(i - 1), tags=(tag,),
                              values=(i, lot["title"], lot["seller"], lot["price"],
                                      "✅" if lot["is_pinned"] else "⬜",
                                      "🔒" if lot["is_closed"] else "",
                                      fmt_time(lot["bumped_at"]),
-                                     "✓" if lot["is_mine"] else ""))
+                                     "↑✓" if auto_bumped else ("✓" if is_mine else "")))
 
         mine_c   = sum(1 for l in listings if l["is_mine"])
         pinned_c = sum(1 for l in listings if l["is_pinned"])
         now_s    = datetime.now().strftime("%H:%M:%S")
-        status   = (f"Оновлено: {now_s}   •   Лотів: {len(listings)}   •   "
-                    f"Мої: {mine_c}   •   Закріплені: {pinned_c}   •   "
-                    f"Нових підняттів: {len(events)}")
-        if db_err:
-            status += f"   •   ⚠ База: {db_err}"
-        self.status_var.set(status)
+        self.status_var.set(
+            f"Оновлено: {now_s}   •   Лотів: {len(listings)}   •   "
+            f"Мої: {mine_c}   •   Закріплені: {pinned_c}   •   "
+            f"Нових підняттів виявлено: {len(events)}"
+        )
         self.search_btn.config(state="normal")
 
         if sel and self.tree.exists(sel):
             self.tree.focus(sel)
             self.tree.selection_set(sel)
 
-        # оновлюємо лог і статистику разом
-        self._append_log(events)
         self._refresh_stats()
-
-    def _append_log(self, events: list[dict]):
-        if not events:
-            return
-        self.log_text.config(state="normal")
-        for ev in events:
-            t = ev["logged_at"][11:19]  # HH:MM:SS
-            seller = ev["seller"]
-            title  = ev["title"][:55] + ("…" if len(ev["title"]) > 55 else "")
-            is_mine = ev["is_mine"]
-            tag = "mine" if is_mine else "other"
-            prefix = "★ " if is_mine else "  "
-
-            self.log_text.insert("end", f"{prefix}", tag)
-            self.log_text.insert("end", f"[{t}] ", "time")
-            self.log_text.insert("end", f"{seller}", "seller")
-            self.log_text.insert("end", f"  підняв  {title}\n", tag)
-
-        self.log_text.see("end")
-        self.log_text.config(state="disabled")
 
     def _refresh_stats(self):
         s = stat_summary()
@@ -502,28 +585,30 @@ class App(tk.Tk):
         market_scale  = len(sellers_today)
         top3_avg = "—"
         if sellers_today:
-            top_n   = min(3, len(sellers_today))
+            top_n    = min(3, len(sellers_today))
             top3_avg = round(sum(r[1] for r in sellers_today[:top_n]) / top_n, 1)
 
         self.stat_summary_var.set(
             f"Всього в базі: {s['total_all']}   •   "
-            f"Сьогодні: {s['total_today']}   •   "
-            f"Мої: {s['my_today']}   •   "
+            f"Сьогодні по всіх: {s['total_today']}   •   "
+            f"Мої сьогодні: {s['my_today']}   •   "
+            f"Авто-підняттів сьогодні: {s['auto_today']}   •   "
             f"Продавців у видачі: {market_scale}   •   "
-            f"Топ-3 середнє/день: {top3_avg} підняттів"
+            f"Топ-3 середнє/день: {top3_avg}"
         )
 
         for r in self.stat_tree.get_children():
             self.stat_tree.delete(r)
 
         conn = db_conn()
-        t = today_iso()
         for name, count_today, is_mine in sellers_today:
             total_all = conn.execute(
                 "SELECT COUNT(*) FROM bumps WHERE seller_name=?", (name,)
             ).fetchone()[0]
             tag = "mine" if is_mine else ""
-            self.stat_tree.insert("", "end", values=(name, count_today, total_all),
+            self.stat_tree.insert("", "end",
+                                  values=(name, count_today, total_all,
+                                          "✓" if is_mine else ""),
                                   tags=(tag,) if tag else ())
         conn.close()
 
