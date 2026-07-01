@@ -210,8 +210,10 @@ def bump_item(token: str, item_id: str) -> tuple[bool, str]:
         if (code == 429 or "cooldown" in ml or "flood" in ml or "wait" in ml
                 or "подожд" in ml or "нужно" in ml or "зачекайте" in ml):
             return False, "кулдаун"
-        if code in (403, 404) or "not found" in ml or "deleted" in ml or "sold" in ml:
+        if code == 404 or "not found" in ml or "deleted" in ml or "sold" in ml:
             return False, "продано/видалено"
+        if code == 403:
+            return False, f"ліміт: {msg[:60] or 'HTTP 403'}"
         return False, msg[:80] or f"HTTP {code}"
     except Exception as e:
         return False, str(e)[:80]
