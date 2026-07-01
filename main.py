@@ -539,7 +539,7 @@ class App(tk.Tk):
             # заразом завантажуємо і теги якщо ще не завантажені
             if not _tag_id_map:
                 fetch_my_tags(token)
-            items = fetch_all_my_items(token, log_fn=lambda msg: self.after(0, lambda m=msg: self._log_cycle(m)))
+            items = fetch_all_my_items(token, log_fn=lambda msg: self.after(0, lambda m=msg: self._add_log(m)))
             self.after(0, self._apply_items_cache, items)
         except Exception as exc:
             self.after(0, self._cache_error, str(exc))
