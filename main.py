@@ -556,6 +556,10 @@ class App(tk.Tk):
 
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
         self._add_log(f"📦 Кеш оновлено: {total} лотів [{self._cache_ts}]")
+        # одноразовий debug: показуємо теги першого лота де є теги
+        sample = next((it for it in items if it.get("tags")), None)
+        if sample:
+            self._add_log(f"[tags структура]: {str(sample.get('tags'))[:150]}")
 
         # плануємо наступне авто-оновлення
         if self._cache_job:
