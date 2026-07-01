@@ -555,19 +555,20 @@ class App(tk.Tk):
             for i, it in enumerate(all_items[:10], 1):
                 self.after(0, self._add_log, f"[ЛОТ {i}] {it}")
 
-            # будуємо індекс tag_name→[items] з даних самих лотів
-            # id_to_name: перевертаємо _tag_id_map
+            # tags — це dict {'15': {tag_id:15, title:...}, '3': {...}}
             id_to_name = {v: k for k, v in _tag_id_map.items()}
             tag_cache: dict[str, list[dict]] = {name: [] for name in _tag_id_map}
             for it in all_items:
-                for t in (it.get("tags") or []):
-                    tid = None
+                raw_tags = it.get("tags") or {}
+                # raw_tags може бути dict або list
+                tag_objs = raw_tags.values() if isinstance(raw_tags, dict) else raw_tags
+                for t in tag_objs:
                     if isinstance(t, dict):
                         tid = t.get("tag_id") or t.get("id")
-                    elif isinstance(t, int):
-                        tid = t
-                    if tid and tid in id_to_name:
-                        tag_cache[id_to_name[tid]].append(it)
+                        if tid and tid in id_to_name:
+                            tag_cache[id_to_name[tid]].append(it)
+                    elif isinstance(t, int) and t in id_to_name:
+                        tag_cache[id_to_name[t]].append(it)
 
             _tag_items_cache = tag_cache
             self.after(0, self._apply_items_cache, all_items)
