@@ -351,17 +351,20 @@ class App(tk.Tk):
             cv.trace_add("write", self._save_config)
 
     def _save_config(self, *_):
+        def _int(var, default=1):
+            try: return var.get()
+            except Exception: return default
         cfg = {
             "token":    self.token_var.get().strip(),
             "url":      self.url_var.get().strip(),
-            "count":    self.count_var.get(),
-            "interval": self.interval_var.get(),
-            "top_n":    self.top_n_var.get(),
+            "count":    _int(self.count_var, 10),
+            "interval": _int(self.interval_var, 60),
+            "top_n":    _int(self.top_n_var, 1),
             "autobump": self.autobump_var.get(),
         }
         for i, (tv, cv) in enumerate(self.tags_cfg):
             cfg[f"tag{i}"]       = tv.get().strip()
-            cfg[f"tag{i}_count"] = cv.get()
+            cfg[f"tag{i}_count"] = _int(cv, 1)
         save_config(cfg)
 
     # ── Layout ────────────────────────────────────────────────────────────────
