@@ -111,7 +111,7 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
     return sorted(set(tags)), raw
 
 
-def fetch_all_my_items(token: str) -> list[dict]:
+def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
     """Завантажує ВСІ активні лоти юзера (з пагінацією через offset)."""
     result   = []
     offset   = 0
@@ -123,16 +123,20 @@ def fetch_all_my_items(token: str) -> list[dict]:
         resp.raise_for_status()
         data  = resp.json()
         items = data.get("items", [])
+        if log_fn:
+            log_fn(f"[DEBUG] offset={offset} → отримано {len(items)} лотів")
         if not items:
             break
         new_items = [it for it in items if it.get("item_id") not in seen_ids]
         if not new_items:
+            if log_fn:
+                log_fn(f"[DEBUG] offset={offset} → всі дублікати, зупинка")
             break
         for it in new_items:
             seen_ids.add(it.get("item_id"))
         result.extend(new_items)
         offset += limit
-        if not new_items or offset > 5000:   # safety cap
+        if offset > 5000:
             break
     return result
 
@@ -537,7 +541,7 @@ class App(tk.Tk):
             # заразом завантажуємо і теги якщо ще не завантажені
             if not _tag_id_map:
                 fetch_my_tags(token)
-            items = fetch_all_my_items(token)
+            items = fetch_all_my_items(token, log_fn=lambda msg: self.after(0, lambda m=msg: self._log_cycle(m)))
             self.after(0, self._apply_items_cache, items)
         except Exception as exc:
             self.after(0, self._cache_error, str(exc))
