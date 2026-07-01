@@ -422,8 +422,8 @@ class App(tk.Tk):
         tk.Label(self, textvariable=self.status_var, bg=BG, fg=SUBTEXT,
                  font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=18, pady=(2, 2))
 
-        # ── PanedWindow: статистика ЗВЕРХУ (більша), лоти ЗНИЗУ ──
-        paned = tk.PanedWindow(self, orient=tk.VERTICAL, bg=BG,
+        # ── PanedWindow: лоти ЛІВОРУЧ, статистика ПРАВОРУЧ ──
+        paned = tk.PanedWindow(self, orient=tk.HORIZONTAL, bg=BG,
                                sashwidth=5, sashrelief="flat")
         paned.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
@@ -446,39 +446,15 @@ class App(tk.Tk):
                         background=CARD, foreground=ACCENT, relief="flat",
                         font=("Segoe UI", 9, "bold"))
 
-        # ── Статистика (зверху, більша) ──
-        stat_frame = tk.Frame(paned, bg=BG)
-        paned.add(stat_frame, minsize=200)
-
-        self.stat_summary_var = tk.StringVar(value="—")
-        tk.Label(stat_frame, textvariable=self.stat_summary_var,
-                 bg=BG, fg=TEXT, font=("Segoe UI", 9), anchor="w", justify="left"
-                 ).pack(anchor="w", padx=8, pady=(4, 4))
-
-        stat_wrap = tk.Frame(stat_frame, bg=BORDER)
-        stat_wrap.pack(fill="both", expand=True, padx=8, pady=(0, 4))
-        scols = ("Продавець", "Підняттів сьогодні", "Всього в базі", "Мій")
-        self.stat_tree = ttk.Treeview(stat_wrap, columns=scols,
-                                      show="headings", style="Stats.Treeview")
-        for c, w in zip(scols, [260, 160, 130, 50]):
-            self.stat_tree.heading(c, text=c)
-            self.stat_tree.column(c, width=w,
-                                  anchor="w" if c == "Продавець" else "center")
-        sb2 = ttk.Scrollbar(stat_wrap, orient="vertical", command=self.stat_tree.yview)
-        self.stat_tree.configure(yscrollcommand=sb2.set)
-        self.stat_tree.pack(side="left", fill="both", expand=True, padx=1, pady=1)
-        sb2.pack(side="right", fill="y")
-        self.stat_tree.tag_configure("mine", background="#15311f", foreground=GREEN)
-
-        # ── Таблиця лотів (знизу) ──
+        # ── Таблиця лотів (ліворуч) ──
         top_frame = tk.Frame(paned, bg=BORDER)
-        paned.add(top_frame, minsize=220)
+        paned.add(top_frame, minsize=400)
 
         cols = ("№", "Назва", "Продавець", "Ціна", "📌", "🔒", "Піднято", "Мій")
         self.tree = ttk.Treeview(top_frame, columns=cols,
                                  show="headings", selectmode="browse")
         for c, w, a in zip(cols,
-                           [32, 320, 160, 100, 38, 38, 110, 50],
+                           [32, 280, 140, 90, 38, 38, 100, 45],
                            ["center", "w", "w", "center", "center", "center", "center", "center"]):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=w, anchor=a)
@@ -490,6 +466,31 @@ class App(tk.Tk):
         self.tree.tag_configure("mine_bump", background="#15311f", foreground=YELLOW)
         self.tree.tag_configure("other",     background="#2b1717", foreground=RED_FG)
         self.tree.bind("<Double-1>", self._open_link)
+
+        # ── Статистика (праворуч) ──
+        stat_frame = tk.Frame(paned, bg=BG)
+        paned.add(stat_frame, minsize=300)
+
+        self.stat_summary_var = tk.StringVar(value="—")
+        tk.Label(stat_frame, textvariable=self.stat_summary_var,
+                 bg=BG, fg=TEXT, font=("Segoe UI", 9), anchor="w", justify="left",
+                 wraplength=400,
+                 ).pack(anchor="w", padx=8, pady=(4, 4))
+
+        stat_wrap = tk.Frame(stat_frame, bg=BORDER)
+        stat_wrap.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+        scols = ("Продавець", "Сьогодні", "Всього", "Мій")
+        self.stat_tree = ttk.Treeview(stat_wrap, columns=scols,
+                                      show="headings", style="Stats.Treeview")
+        for c, w in zip(scols, [180, 80, 70, 40]):
+            self.stat_tree.heading(c, text=c)
+            self.stat_tree.column(c, width=w,
+                                  anchor="w" if c == "Продавець" else "center")
+        sb2 = ttk.Scrollbar(stat_wrap, orient="vertical", command=self.stat_tree.yview)
+        self.stat_tree.configure(yscrollcommand=sb2.set)
+        self.stat_tree.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        sb2.pack(side="right", fill="y")
+        self.stat_tree.tag_configure("mine", background="#15311f", foreground=GREEN)
 
         self._enable_paste(self.token_entry)
 
