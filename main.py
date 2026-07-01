@@ -154,7 +154,8 @@ def fetch_item_title(token: str, item_id: str) -> str:
     return f"#{item_id}"
 
 
-def bump_item(token: str, item_id: str) -> bool:
+def bump_item(token: str, item_id: str) -> tuple[bool, str]:
+    """Повертає (успіх, причина_помилки)."""
     url = f"{API_BASE}/{item_id}/bump"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
@@ -163,9 +164,20 @@ def bump_item(token: str, item_id: str) -> bool:
     }
     try:
         resp = requests.post(url, headers=headers, timeout=15)
-        return resp.status_code in (200, 201)
-    except Exception:
-        return False
+        if resp.status_code in (200, 201):
+            return True, ""
+        # розбираємо причину
+        try:
+            msg = resp.json().get("message") or resp.json().get("error") or ""
+        except Exception:
+            msg = resp.text[:80]
+        if resp.status_code == 429 or "cooldown" in msg.lower() or "flood" in msg.lower():
+            return False, "кулдаун"
+        if "bump" in msg.lower() and ("limit" in msg.lower() or "left" in msg.lower() or "0" in msg):
+            return False, f"ліміт підняттів вичерпано: {msg}"
+        return False, msg or f"HTTP {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
 
 
 # ─── SQLite ───────────────────────────────────────────────────────────────────
@@ -654,18 +666,27 @@ class App(tk.Tk):
             return
 
         bumped_ids = set()
-        bumped_titles = []
+        log_lines = []
+        errors: dict[str, str] = {}
+
         for item_id in my_ids:
-            if bump_item(token, item_id):
+            ok, reason = bump_item(token, item_id)
+            if ok:
                 bumped_ids.add(item_id)
                 self._bump_count += 1
                 title = fetch_item_title(token, item_id)
-                bumped_titles.append(f"↑ [{tag}] {title}  {now_str}")
+                log_lines.append(f"✅ [{tag}] {title}  {now_str}")
+            else:
+                errors[item_id] = reason
 
         self._last_auto_bumped = bumped_ids
 
-        if bumped_titles:
-            self._cycle_log = (bumped_titles + self._cycle_log)[:50]
+        # Додаємо помилки в лог
+        for item_id, reason in errors.items():
+            log_lines.append(f"⛔ [{tag}] #{item_id} — {reason}  {now_str}")
+
+        if log_lines:
+            self._cycle_log = (log_lines + self._cycle_log)[:60]
             self.after(0, self._refresh_cycle_log)
 
         self.after(0, self.bump_count_var.set, f"Підняттів скриптом: {self._bump_count}")
@@ -673,9 +694,13 @@ class App(tk.Tk):
         if bumped_ids:
             self.after(0, self.bump_status_var.set,
                        f"↑ «{tag}»: підняв {len(bumped_ids)} лот(ів) о {now_str}")
+        elif errors:
+            first_err = next(iter(errors.values()))
+            self.after(0, self.bump_status_var.set,
+                       f"⛔ «{tag}»: {first_err}")
         else:
             self.after(0, self.bump_status_var.set,
-                       f"⚠ «{tag}»: кулдаун або помилка API")
+                       f"⚠ «{tag}»: нема лотів для підняття")
 
         self._advance_cycle(active_tags)
 
