@@ -135,7 +135,7 @@ def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
         for it in new_items:
             seen_ids.add(it.get("item_id"))
         result.extend(new_items)
-        offset += limit
+        offset += len(items)
         if offset > 5000:
             break
     return result
