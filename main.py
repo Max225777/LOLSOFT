@@ -131,10 +131,8 @@ def fetch_all_my_items(token: str) -> list[dict]:
         for it in new_items:
             seen_ids.add(it.get("item_id"))
         result.extend(new_items)
-        if len(items) < limit:
-            break
         offset += limit
-        if offset > 2000:   # safety cap (2000 лотів)
+        if not new_items or offset > 5000:   # safety cap
             break
     return result
 
