@@ -222,10 +222,13 @@ class App(tk.Tk):
         self.geometry("1120x760")
         self.configure(bg=BG)
         self._listing_data: list[dict] = []
-        self._auto_job    = None
-        self._show_token  = False
-        self._bump_count  = 0        # підняттів зроблено скриптом за сесію
+        self._auto_job         = None
+        self._show_token       = False
+        self._bump_count       = 0
         self._last_auto_bumped: set[str] = set()
+        # стан циклу підняттів: індекс поточного тега і скільки разів вже підняли за поточний крок
+        self._cycle_tag_idx    = 0
+        self._cycle_done_count = 0
         self._build_ui()
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -299,37 +302,54 @@ class App(tk.Tk):
         )
         self.search_btn.pack(side="left")
 
-        # Авто-підняття
-        bump_row = tk.Frame(self, bg=BG)
-        bump_row.pack(fill="x", padx=16, pady=(4, 2))
+        # ── Авто-підняття: заголовок + увімкнення ──
+        bump_header = tk.Frame(self, bg=BG)
+        bump_header.pack(fill="x", padx=16, pady=(6, 2))
 
         self.autobump_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            bump_row, text="Авто-підняття", variable=self.autobump_var,
+            bump_header, text="Авто-підняття (цикл по тегах)", variable=self.autobump_var,
             bg=BG, fg=YELLOW, selectcolor=CARD,
             activebackground=BG, activeforeground=YELLOW,
             font=("Segoe UI", 10, "bold"), cursor="hand2",
-        ).pack(side="left", padx=(0, 12))
-
-        tk.Label(bump_row, text="Тег лотів для підняття:", bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 10)).pack(side="left")
-        self.tag_var = tk.StringVar(value="")
-        tk.Entry(bump_row, textvariable=self.tag_var, width=18,
-                 bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
-                 font=("Segoe UI", 10), highlightthickness=1,
-                 highlightbackground=BORDER, highlightcolor=ACCENT,
-                 ).pack(side="left", padx=(6, 12), ipady=4)
-
-        tk.Label(bump_row, text="Мої лоти в топ:", bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 10)).pack(side="left")
-        self.top_n_var = tk.IntVar(value=3)
-        tk.Spinbox(bump_row, from_=1, to=20, textvariable=self.top_n_var, width=4,
-                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
-                   font=("Segoe UI", 10)).pack(side="left", padx=(4, 12))
+        ).pack(side="left", padx=(0, 16))
 
         self.bump_count_var = tk.StringVar(value="Підняттів скриптом: 0")
-        tk.Label(bump_row, textvariable=self.bump_count_var, bg=BG, fg=YELLOW,
-                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 12))
+        tk.Label(bump_header, textvariable=self.bump_count_var,
+                 bg=BG, fg=YELLOW, font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 12))
+
+        self.cycle_status_var = tk.StringVar(value="")
+        tk.Label(bump_header, textvariable=self.cycle_status_var,
+                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 9)).pack(side="left")
+
+        # ── 3 рядки тегів ──
+        self.tags_cfg: list[tuple[tk.StringVar, tk.IntVar]] = []
+
+        tags_frame = tk.Frame(self, bg=BG)
+        tags_frame.pack(fill="x", padx=16, pady=(2, 2))
+
+        for i in range(3):
+            row = tk.Frame(tags_frame, bg=BG)
+            row.pack(fill="x", pady=1)
+
+            tk.Label(row, text=f"Тег {i+1}:", bg=BG, fg=SUBTEXT,
+                     font=("Segoe UI", 10), width=6, anchor="w").pack(side="left")
+
+            tag_var = tk.StringVar(value="")
+            tk.Entry(row, textvariable=tag_var, width=20,
+                     bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
+                     font=("Segoe UI", 10), highlightthickness=1,
+                     highlightbackground=BORDER, highlightcolor=ACCENT,
+                     ).pack(side="left", padx=(4, 8), ipady=3)
+
+            tk.Label(row, text="підняттів за цикл:", bg=BG, fg=SUBTEXT,
+                     font=("Segoe UI", 10)).pack(side="left")
+            count_var = tk.IntVar(value=1)
+            tk.Spinbox(row, from_=1, to=50, textvariable=count_var, width=4,
+                       bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                       font=("Segoe UI", 10)).pack(side="left", padx=(4, 0))
+
+            self.tags_cfg.append((tag_var, count_var))
 
         self.bump_status_var = tk.StringVar(value="")
         tk.Label(bump_row, textvariable=self.bump_status_var, bg=BG, fg=SUBTEXT,
@@ -478,53 +498,75 @@ class App(tk.Tk):
         except Exception as exc:
             self.after(0, self._show_error, str(exc))
 
-    # ── Авто-підняття ────────────────────────────────────────────────────────
+    # ── Авто-підняття (цикл по тегах) ───────────────────────────────────────
     def _do_auto_bump(self, listings: list[dict]):
-        """Перевіряє чи мої лоти в топ-N. Якщо ні — піднімає через API."""
-        token  = self.token_var.get().strip()
-        tag    = self.tag_var.get().strip()
-        top_n  = self.top_n_var.get()
+        """
+        Цикл: тег1 → N разів, тег2 → M разів, тег3 → K разів → знову тег1.
+        На кожному скані виконує один крок циклу (одне підняття одного тега).
+        """
+        token = self.token_var.get().strip()
 
-        # скільки моїх зараз у топ-N
-        top_n_lots = listings[:top_n]
-        my_in_top  = [l for l in top_n_lots if l["is_mine"]]
+        # збираємо активні теги (ті де є назва)
+        active_tags = [
+            (tag_var.get().strip(), count_var.get())
+            for tag_var, count_var in self.tags_cfg
+            if tag_var.get().strip()
+        ]
 
-        if my_in_top:
-            self.after(0, self.bump_status_var.set,
-                       f"✓ Твої лоти в топ-{top_n}: {len(my_in_top)} шт")
+        if not active_tags:
+            self.after(0, self.cycle_status_var.set, "⚠ Вкажи хоча б один тег")
             return
 
-        # мої лоти відсутні у топ-N — отримуємо мої лоти і піднімаємо
-        self.after(0, self.bump_status_var.set, "Піднімаю…")
+        # поточний тег у циклі
+        if self._cycle_tag_idx >= len(active_tags):
+            self._cycle_tag_idx = 0
+            self._cycle_done_count = 0
+
+        tag, bumps_needed = active_tags[self._cycle_tag_idx]
+
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self.after(0, self.cycle_status_var.set,
+                   f"Крок: тег «{tag}» {self._cycle_done_count+1}/{bumps_needed}  [{now_str}]")
+
+        # підняти лоти з цим тегом
         try:
             my_ids = fetch_my_listings(token, tag)
         except Exception as exc:
-            self.after(0, self.bump_status_var.set, f"⚠ Не вдалось отримати мої лоти: {exc}")
+            self.after(0, self.bump_status_var.set, f"⚠ Помилка API: {exc}")
             return
 
         if not my_ids:
-            self.after(0, self.bump_status_var.set,
-                       f"Мої лоти з тегом «{tag}» не знайдено")
+            self.after(0, self.bump_status_var.set, f"Лоти з тегом «{tag}» не знайдено")
+            # пропускаємо цей тег
+            self._advance_cycle(active_tags)
             return
 
         bumped_ids = set()
         for item_id in my_ids:
-            ok = bump_item(token, item_id)
-            if ok:
+            if bump_item(token, item_id):
                 bumped_ids.add(item_id)
                 self._bump_count += 1
 
         self._last_auto_bumped = bumped_ids
 
-        self.after(0, self.bump_count_var.set,
-                   f"Підняттів скриптом: {self._bump_count}")
+        self.after(0, self.bump_count_var.set, f"Підняттів скриптом: {self._bump_count}")
 
         if bumped_ids:
             self.after(0, self.bump_status_var.set,
-                       f"↑ Підняв {len(bumped_ids)} лот(ів) о {datetime.now().strftime('%H:%M:%S')}")
+                       f"↑ «{tag}»: підняв {len(bumped_ids)} лот(ів) о {now_str}")
         else:
             self.after(0, self.bump_status_var.set,
-                       "⚠ Жоден лот не вдалось підняти (помилка API або кулдаун)")
+                       f"⚠ «{tag}»: кулдаун або помилка API")
+
+        self._advance_cycle(active_tags)
+
+    def _advance_cycle(self, active_tags: list[tuple]):
+        """Рухає лічильник циклу вперед."""
+        _, bumps_needed = active_tags[self._cycle_tag_idx]
+        self._cycle_done_count += 1
+        if self._cycle_done_count >= bumps_needed:
+            self._cycle_tag_idx = (self._cycle_tag_idx + 1) % len(active_tags)
+            self._cycle_done_count = 0
 
     # ── Populate ─────────────────────────────────────────────────────────────
     def _populate(self, listings: list[dict]):
