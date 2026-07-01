@@ -396,15 +396,8 @@ class App(tk.Tk):
             font=("Segoe UI", 9), activebackground=BORDER)
         self.load_items_btn.pack(side="left")
 
-        # рядок статусу кешу (окремо від кнопок)
-        bh2 = tk.Frame(self, bg=BG)
-        bh2.pack(fill="x", padx=16, pady=(0, 2))
         self.cycle_status_var = tk.StringVar(value="")
-        tk.Label(bh2, textvariable=self.cycle_status_var,
-                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 9), anchor="w").pack(side="left")
-        self.cache_info_var = tk.StringVar(value="")
-        tk.Label(bh2, textvariable=self.cache_info_var,
-                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 8), anchor="w").pack(side="left", padx=(12,0))
+        self.cache_info_var   = tk.StringVar(value="")
 
         # ── Блок тегів + лог ──
         bump_body = tk.Frame(self, bg=BG)
@@ -561,10 +554,8 @@ class App(tk.Tk):
         # підраховуємо лоти по тегах і оновлюємо лічильники
         self._update_all_tag_counts()
 
-        self.cache_info_var.set(f"Лотів у кеші: {total}  •  оновлено {self._cache_ts}")
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
-
-        self.cycle_status_var.set(f"Кеш: {total} лотів • оновлено {self._cache_ts}")
+        self._add_log(f"📦 Кеш оновлено: {total} лотів [{self._cache_ts}]")
 
         # плануємо наступне авто-оновлення
         if self._cache_job:
@@ -572,7 +563,7 @@ class App(tk.Tk):
         self._cache_job = self.after(CACHE_REFRESH, self._auto_refresh_cache)
 
     def _cache_error(self, msg: str):
-        self.cycle_status_var.set(f"⚠ Кеш: {msg}")
+        self._add_log(f"⚠ Кеш: {msg}")
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
 
     def _auto_refresh_cache(self):
@@ -608,7 +599,7 @@ class App(tk.Tk):
             tags, raw = fetch_my_tags(token)
             self.after(0, self._apply_tags, tags, raw)
         except Exception as exc:
-            self.after(0, self.cycle_status_var.set, f"⚠ Теги: {exc}")
+            self.after(0, self._add_log, f"⚠ Теги: {exc}")
             self.after(0, self.load_tags_btn.config, {"state":"normal","text":"🔄 Теги"})
 
     def _apply_tags(self, tags: list[str], raw: str = ""):
@@ -617,9 +608,9 @@ class App(tk.Tk):
             cb["values"] = tags
         self.load_tags_btn.config(state="normal", text="🔄 Теги")
         if tags:
-            self.cycle_status_var.set(f"Теги: {', '.join(tags)}")
+            self._add_log(f"🏷 Теги завантажено: {', '.join(tags)}")
         else:
-            self.cycle_status_var.set(f"Теги не знайдено. Raw: {raw[:100]}")
+            self._add_log(f"⚠ Теги не знайдено. Raw: {raw[:100]}")
         self._update_all_tag_counts()
 
     def _find_comboboxes(self, parent) -> list:
@@ -703,7 +694,7 @@ class App(tk.Tk):
             for tv, cv in self.tags_cfg if tv.get().strip()
         ]
         if not active_tags:
-            self.after(0, self.cycle_status_var.set, "⚠ Вкажи хоча б один тег")
+            self.after(0, self._add_log, "⚠ Вкажи хоча б один тег")
             return
 
         # якщо кеш порожній — завантажуємо
@@ -715,7 +706,7 @@ class App(tk.Tk):
                 self.after(0, self._apply_items_cache, items)
                 cache = items
             except Exception as exc:
-                self.after(0, self.cycle_status_var.set, f"⚠ Не вдалось завантажити лоти: {exc}")
+                self.after(0, self._add_log, f"⚠ Не вдалось завантажити лоти: {exc}")
                 return
         else:
             cache = self._items_cache
@@ -726,8 +717,8 @@ class App(tk.Tk):
 
         tag, bumps_needed = active_tags[self._cycle_tag_idx]
         now_str = datetime.now().strftime("%H:%M:%S")
-        self.after(0, self.cycle_status_var.set,
-                   f"Крок: «{tag}» {self._cycle_done_count+1}/{bumps_needed}  [{now_str}]")
+        self.after(0, self._add_log,
+                   f"▶ Крок: «{tag}» {self._cycle_done_count+1}/{bumps_needed}  [{now_str}]")
 
         # фільтруємо по тегу з кешу
         my_items = items_for_tag(cache, tag)
@@ -796,7 +787,7 @@ class App(tk.Tk):
     def _copy_logs(self):
         self.clipboard_clear()
         self.clipboard_append("\n".join(self._cycle_log))
-        self.cycle_status_var.set("✅ Логи скопійовано")
+        self._add_log("✅ Логи скопійовано")
 
     # ── Populate ─────────────────────────────────────────────────────────────
     def _populate(self, listings: list[dict]):
@@ -807,7 +798,7 @@ class App(tk.Tk):
             mine_in_top = sum(1 for l in listings[:top_n] if l["is_mine"])
             if mine_in_top >= top_n:
                 now_s = datetime.now().strftime("%H:%M:%S")
-                self.cycle_status_var.set(f"✅ Топ-{top_n} вже наш — бамп пропущено  [{now_s}]")
+                self._add_log(f"✅ Топ-{top_n} вже наш — бамп пропущено  [{now_s}]")
             else:
                 threading.Thread(
                     target=self._do_auto_bump, args=(listings,), daemon=True).start()
