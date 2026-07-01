@@ -308,6 +308,7 @@ class App(tk.Tk):
         self._show_token                = False
         self._bump_count                = 0
         self._last_auto_bumped: set[str]= set()
+        self._tag_bump_idx: dict[str,int] = {}   # поточний індекс лоту per-tag
         self._cycle_tag_idx             = 0
         self._cycle_done_count          = 0
         self._cycle_log: list[str]      = []
@@ -827,46 +828,39 @@ class App(tk.Tk):
             self._advance_cycle(active_tags)
             return
 
-        # перебираємо лоти поки один не піднімється
-        log_lines    = []
-        bumped_id    = None
-        cooldown_cnt = 0
+        # один запит за крок — беремо лот за індексом, наступного разу наступний
+        total = len(my_items)
+        idx   = self._tag_bump_idx.get(tag, 0) % total
+        it    = my_items[idx]
+        iid   = str(it.get("item_id", ""))
+        title = item_title(it)
 
-        for it in my_items:
-            iid   = str(it.get("item_id", ""))
-            title = item_title(it)
-            ok, reason = bump_item(token, iid)
+        ok, reason = bump_item(token, iid)
 
-            if ok:
-                bumped_id = iid
-                self._bump_count += 1
-                self._last_auto_bumped = {iid}
-                log_lines.append(f"✅ [{tag}] {title}  {now_str}")
-                break
-            elif reason == "продано/видалено":
-                self._items_cache = [x for x in self._items_cache
-                                     if str(x.get("item_id","")) != iid]
-                log_lines.append(f"🗑 [{tag}] {title} — продано/видалено  {now_str}")
-                self.after(0, self._update_all_tag_counts)
-            elif reason == "кулдаун":
-                cooldown_cnt += 1
-            else:
-                log_lines.append(f"⛔ [{tag}] {title} — {reason}  {now_str}")
-
-        if cooldown_cnt:
-            log_lines.append(f"⏳ [{tag}] {cooldown_cnt} лотів на кулдауні  {now_str}")
-
-        if not bumped_id:
-            self._last_auto_bumped = set()
-
-        self._add_log(*log_lines)
-        self.after(0, self.bump_count_var.set, f"Підняттів: {self._bump_count}")
-
-        if bumped_id:
+        if ok:
+            self._bump_count += 1
+            self._last_auto_bumped = {iid}
+            self._tag_bump_idx[tag] = (idx + 1) % total
+            self._add_log(f"✅ [{tag}] {title}  {now_str}")
             self.after(0, self.bump_status_var.set, f"↑ «{tag}» підняв лот  {now_str}")
+        elif reason == "продано/видалено":
+            self._items_cache = [x for x in self._items_cache
+                                 if str(x.get("item_id","")) != iid]
+            self.after(0, self._update_all_tag_counts)
+            self._tag_bump_idx[tag] = idx % max(total - 1, 1)
+            self._add_log(f"🗑 [{tag}] {title} — продано/видалено  {now_str}")
+            self.after(0, self.bump_status_var.set, f"🗑 «{tag}» лот видалено")
+        elif reason == "кулдаун":
+            self._tag_bump_idx[tag] = (idx + 1) % total
+            self._add_log(f"⏳ [{tag}] #{idx+1}/{total} кулдаун → наступний  {now_str}")
+            self.after(0, self.bump_status_var.set, f"⏳ «{tag}» #{idx+1} кулдаун")
         else:
-            self.after(0, self.bump_status_var.set,
-                       f"⛔ «{tag}»: всі лоти на кулдауні / проблема")
+            self._tag_bump_idx[tag] = (idx + 1) % total
+            self._add_log(f"⛔ [{tag}] {title} — {reason}  {now_str}")
+            self.after(0, self.bump_status_var.set, f"⛔ «{tag}»: {reason[:40]}")
+
+        self._last_auto_bumped = self._last_auto_bumped if ok else set()
+        self.after(0, self.bump_count_var.set, f"Підняттів: {self._bump_count}")
 
         self._advance_cycle(active_tags)
 
