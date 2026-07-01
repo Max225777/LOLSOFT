@@ -116,14 +116,15 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
 
 
 def fetch_my_listings(token: str, tag: str) -> list[str]:
-    """Повертає item_id активних лотів з вказаним тегом."""
+    """Повертає item_id активних лотів строго з вказаним тегом (по tag_id)."""
     params = f"user_id={MY_PROFILE_ID}&status=active"
     if tag.strip():
         tag_id = _tag_id_map.get(tag.strip())
         if tag_id is not None:
             params += f"&tag_id={tag_id}"
         else:
-            params += f"&tag={urllib.parse.quote(tag.strip())}"
+            # tag_id невідомий — не можна фільтрувати безпечно, повертаємо пусто
+            raise RuntimeError(f"Тег «{tag}» не знайдено в завантажених тегах. Натисни 🔄")
     url = f"{API_BASE}/?{params}"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
@@ -643,6 +644,14 @@ class App(tk.Tk):
         if not active_tags:
             self.after(0, self.cycle_status_var.set, "⚠ Вкажи хоча б один тег")
             return
+
+        # Якщо _tag_id_map ще порожній — завантажуємо теги зараз,
+        # щоб фільтрація по tag_id працювала правильно
+        if not _tag_id_map:
+            try:
+                _, _ = fetch_my_tags(token)
+            except Exception:
+                pass
 
         if self._cycle_tag_idx >= len(active_tags):
             self._cycle_tag_idx = 0
