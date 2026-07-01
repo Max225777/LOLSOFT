@@ -121,8 +121,6 @@ def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
         resp = requests.get(url, headers=_headers(token), timeout=30)
         resp.raise_for_status()
         items = resp.json().get("items", [])
-        if log_fn:
-            log_fn(f"[DEBUG] page={page} → {len(items)} лотів")
         if not items:
             break
         added = 0
@@ -146,14 +144,24 @@ def items_for_tag(cache: list[dict], tag: str) -> list[dict]:
     target_name = tag.strip().lower()
     result = []
     for it in cache:
-        for t in (it.get("tags") or []):
+        raw_tags = it.get("tags") or []
+        matched  = False
+        for t in raw_tags:
             if isinstance(t, dict):
-                if (target_id is not None and t.get("tag_id") == target_id):
-                    result.append(it); break
-                if (t.get("title") or t.get("name") or "").lower() == target_name:
-                    result.append(it); break
-            elif isinstance(t, str) and t.strip().lower() == target_name:
-                result.append(it); break
+                tid = t.get("tag_id") or t.get("id")
+                tname = (t.get("title") or t.get("name") or "").lower()
+                if target_id is not None and tid == target_id:
+                    matched = True; break
+                if tname and tname == target_name:
+                    matched = True; break
+            elif isinstance(t, int):
+                if target_id is not None and t == target_id:
+                    matched = True; break
+            elif isinstance(t, str):
+                if t.strip().lower() == target_name:
+                    matched = True; break
+        if matched:
+            result.append(it)
     return result
 
 
@@ -538,7 +546,7 @@ class App(tk.Tk):
             # заразом завантажуємо і теги якщо ще не завантажені
             if not _tag_id_map:
                 fetch_my_tags(token)
-            items = fetch_all_my_items(token, log_fn=lambda msg: self.after(0, lambda m=msg: self._add_log(m)))
+            items = fetch_all_my_items(token)
             self.after(0, self._apply_items_cache, items)
         except Exception as exc:
             self.after(0, self._cache_error, str(exc))
@@ -554,12 +562,7 @@ class App(tk.Tk):
         self.cache_info_var.set(f"Лотів у кеші: {total}  •  оновлено {self._cache_ts}")
         self.load_items_btn.config(state="normal", text="📦 Завантажити лоти")
 
-        # дебаг: показуємо структуру тегів першого лота де є теги
-        if items:
-            sample = next((it for it in items if it.get("tags")), items[0])
-            raw = str(sample.get("tags", "–"))[:120]
-            self._add_log(f"[DEBUG tags] item_id={sample.get('item_id')} tags={raw}")
-            self.cycle_status_var.set(f"Кеш: {total} лотів • оновлено {self._cache_ts}")
+        self.cycle_status_var.set(f"Кеш: {total} лотів • оновлено {self._cache_ts}")
 
         # плануємо наступне авто-оновлення
         if self._cache_job:
