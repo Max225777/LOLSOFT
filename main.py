@@ -112,19 +112,29 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
 
 
 def fetch_all_my_items(token: str) -> list[dict]:
-    """Завантажує ВСІ активні лоти юзера (з пагінацією)."""
-    result = []
-    page   = 1
+    """Завантажує ВСІ активні лоти юзера (з пагінацією через offset)."""
+    result   = []
+    offset   = 0
+    limit    = 50
+    seen_ids = set()
     while True:
-        url  = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active&limit=50&page={page}"
+        url  = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active&limit={limit}&offset={offset}"
         resp = requests.get(url, headers=_headers(token), timeout=30)
         resp.raise_for_status()
-        items = resp.json().get("items", [])
-        result.extend(items)
-        if len(items) < 50:
+        data  = resp.json()
+        items = data.get("items", [])
+        if not items:
             break
-        page += 1
-        if page > 20:   # safety cap
+        new_items = [it for it in items if it.get("item_id") not in seen_ids]
+        if not new_items:
+            break
+        for it in new_items:
+            seen_ids.add(it.get("item_id"))
+        result.extend(new_items)
+        if len(items) < limit:
+            break
+        offset += limit
+        if offset > 2000:   # safety cap (2000 лотів)
             break
     return result
 
