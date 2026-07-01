@@ -861,6 +861,10 @@ class App(tk.Tk):
                 if total == 0:
                     break
                 idx = idx % total
+            elif reason.startswith("ліміт"):
+                self._add_log(f"🚫 [{tag}] {title} — {reason}  {now_str}")
+                idx = (idx + 1) % total
+                self._tag_bump_idx[tag] = idx
             elif reason == "кулдаун":
                 self.after(0, self.bump_status_var.set,
                            f"⏳ «{tag}» #{idx+1} кулдаун, чекаю 3с…")
