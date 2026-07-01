@@ -84,33 +84,61 @@ def fetch_listings(market_url: str, token: str, count: int) -> list[dict]:
 
 
 def fetch_my_tags(token: str) -> tuple[list[str], str]:
-    """Повертає (унікальні теги, raw sample першого айтема для дебагу)."""
-    url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
+    """Повертає (список назв тегів, raw debug рядок)."""
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
         "User-Agent": "LOLSOFT/1.0",
     }
+
+    # Спочатку пробуємо endpoint /tag — повертає всі теги юзера з назвами
+    try:
+        r = requests.get(f"{API_BASE}/tag", headers=headers, timeout=15)
+        if r.ok:
+            data = r.json()
+            raw = str(data)[:200]
+            tags = []
+            # можливі структури: {"tags": [...]} або {"items": [...]} або просто список
+            items = data.get("tags") or data.get("items") or (data if isinstance(data, list) else [])
+            for t in items:
+                if isinstance(t, str) and t.strip():
+                    tags.append(t.strip())
+                elif isinstance(t, dict):
+                    name = (t.get("name") or t.get("title") or
+                            t.get("tag_name") or t.get("label") or "").strip()
+                    if name:
+                        tags.append(name)
+            if tags:
+                return sorted(set(tags)), raw
+    except Exception:
+        pass
+
+    # Запасний варіант: скануємо свої лоти і збираємо поле "tag" (рядок-назва)
+    url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
     resp = requests.get(url, headers=headers, timeout=20)
     resp.raise_for_status()
     data = resp.json()
     items = data.get("items", [])
-    raw_sample = str(items[0] if items else data)[:200]
+    raw = str(items[0] if items else data)[:200]
 
     tags = set()
     for it in items:
-        for t in (it.get("tags") or []):
-            if isinstance(t, str) and t.strip():
-                tags.add(t.strip())
-            elif isinstance(t, dict):
-                name = (t.get("name") or t.get("title") or
-                        t.get("tag_name") or t.get("label") or "").strip()
-                if name:
-                    tags.add(name)
-        single = it.get("tag")
-        if isinstance(single, str) and single.strip():
-            tags.add(single.strip())
-    return sorted(tags), raw_sample
+        # Перевіряємо всі можливі поля з тегами
+        for field in ("tags", "item_tags"):
+            for t in (it.get(field) or []):
+                if isinstance(t, str) and t.strip():
+                    tags.add(t.strip())
+                elif isinstance(t, dict):
+                    name = (t.get("name") or t.get("title") or
+                            t.get("tag_name") or t.get("label") or "").strip()
+                    if name:
+                        tags.add(name)
+        for field in ("tag", "tag_name", "label"):
+            val = it.get(field)
+            if isinstance(val, str) and val.strip():
+                tags.add(val.strip())
+
+    return sorted(tags), raw
 
 
 def fetch_my_listings(token: str, tag: str) -> list[str]:
