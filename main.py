@@ -551,6 +551,10 @@ class App(tk.Tk):
             self.after(0, lambda: self.load_items_btn.config(text="Завантаження…"))
             all_items = fetch_all_my_items(token)
 
+            # лог перших 10 лотів повністю
+            for i, it in enumerate(all_items[:10], 1):
+                self.after(0, self._add_log, f"[ЛОТ {i}] {it}")
+
             # будуємо індекс tag_name→[items] з даних самих лотів
             # id_to_name: перевертаємо _tag_id_map
             id_to_name = {v: k for k, v in _tag_id_map.items()}
