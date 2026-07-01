@@ -85,7 +85,7 @@ def fetch_listings(market_url: str, token: str, count: int) -> list[dict]:
 
 def fetch_my_tags(token: str) -> list[str]:
     """Повертає унікальні теги з активних лотів юзера."""
-    url = f"{API_BASE}/items?user_id={MY_PROFILE_ID}&status=active"
+    url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
@@ -108,7 +108,7 @@ def fetch_my_listings(token: str, tag: str) -> list[str]:
     params = f"user_id={MY_PROFILE_ID}&status=active"
     if tag.strip():
         params += f"&tag={urllib.parse.quote(tag.strip())}"
-    url = f"{API_BASE}/items?{params}"
+    url = f"{API_BASE}/?{params}"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
         "Accept": "application/json",
