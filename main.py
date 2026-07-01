@@ -5,13 +5,29 @@ import urllib.parse
 import sqlite3
 import requests
 import webbrowser
+import json
 from pathlib import Path
 from datetime import datetime
 
 MY_PROFILE_ID = "9542364"
 API_BASE      = "https://prod-api.lzt.market"
 DB_PATH       = Path(__file__).parent / "lolsoft_stats.db"
+CONFIG_PATH   = Path(__file__).parent / "lolsoft_config.json"
 CACHE_REFRESH  = 5 * 60 * 1000   # 5 хвилин у мс
+
+
+def load_config() -> dict:
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_config(cfg: dict):
+    try:
+        CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 DEFAULT_URL = (
     "https://lzt.market/telegram/"
@@ -191,7 +207,8 @@ def bump_item(token: str, item_id: str) -> tuple[bool, str]:
         ml   = msg.lower()
         if code in (403, 404) or "not found" in ml or "deleted" in ml or "sold" in ml:
             return False, "продано/видалено"
-        if code == 429 or "cooldown" in ml or "flood" in ml or "wait" in ml:
+        if (code == 429 or "cooldown" in ml or "flood" in ml or "wait" in ml
+                or "подожд" in ml or "нужно" in ml or "зачекайте" in ml):
             return False, "кулдаун"
         if "limit" in ml or ("bump" in ml and "0" in ml):
             return False, f"ліміт: {msg[:60]}"
@@ -297,7 +314,54 @@ class App(tk.Tk):
         # кеш ВСІХ моїх активних лотів (оновлюється кожні 5 хв)
         self._items_cache: list[dict]   = []
         self._cache_ts: str             = "не завантажено"
+        self._cfg                       = load_config()
         self._build_ui()
+        self._apply_config()
+
+    # ── Config ────────────────────────────────────────────────────────────────
+    def _apply_config(self):
+        c = self._cfg
+        if c.get("token"):
+            self.token_var.set(c["token"])
+        if c.get("url"):
+            self.url_var.set(c["url"])
+        if c.get("count"):
+            self.count_var.set(c["count"])
+        if c.get("interval"):
+            self.interval_var.set(c["interval"])
+        if c.get("top_n"):
+            self.top_n_var.set(c["top_n"])
+        for i, (tv, cv) in enumerate(self.tags_cfg):
+            key = f"tag{i}"
+            if c.get(key):
+                tv.set(c[key])
+            key2 = f"tag{i}_count"
+            if c.get(key2):
+                cv.set(c[key2])
+        if c.get("autobump"):
+            self.autobump_var.set(True)
+            self._toggle_auto()
+        # авто-збереження при зміні будь-якого поля
+        for var in (self.token_var, self.url_var, self.count_var,
+                    self.interval_var, self.top_n_var, self.autobump_var):
+            var.trace_add("write", self._save_config)
+        for tv, cv in self.tags_cfg:
+            tv.trace_add("write", self._save_config)
+            cv.trace_add("write", self._save_config)
+
+    def _save_config(self, *_):
+        cfg = {
+            "token":    self.token_var.get().strip(),
+            "url":      self.url_var.get().strip(),
+            "count":    self.count_var.get(),
+            "interval": self.interval_var.get(),
+            "top_n":    self.top_n_var.get(),
+            "autobump": self.autobump_var.get(),
+        }
+        for i, (tv, cv) in enumerate(self.tags_cfg):
+            cfg[f"tag{i}"]       = tv.get().strip()
+            cfg[f"tag{i}_count"] = cv.get()
+        save_config(cfg)
 
     # ── Layout ────────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -764,8 +828,9 @@ class App(tk.Tk):
             return
 
         # перебираємо лоти поки один не піднімється
-        log_lines  = []
-        bumped_id  = None
+        log_lines    = []
+        bumped_id    = None
+        cooldown_cnt = 0
 
         for it in my_items:
             iid   = str(it.get("item_id", ""))
@@ -779,13 +844,17 @@ class App(tk.Tk):
                 log_lines.append(f"✅ [{tag}] {title}  {now_str}")
                 break
             elif reason == "продано/видалено":
-                # прибираємо з кешу
                 self._items_cache = [x for x in self._items_cache
                                      if str(x.get("item_id","")) != iid]
                 log_lines.append(f"🗑 [{tag}] {title} — продано/видалено  {now_str}")
                 self.after(0, self._update_all_tag_counts)
+            elif reason == "кулдаун":
+                cooldown_cnt += 1
             else:
                 log_lines.append(f"⛔ [{tag}] {title} — {reason}  {now_str}")
+
+        if cooldown_cnt:
+            log_lines.append(f"⏳ [{tag}] {cooldown_cnt} лотів на кулдауні  {now_str}")
 
         if not bumped_id:
             self._last_auto_bumped = set()
