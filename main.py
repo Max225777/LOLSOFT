@@ -545,18 +545,25 @@ class App(tk.Tk):
         global _tag_items_cache
         try:
             if not _tag_id_map:
-                self.after(0, lambda: self.load_items_btn.config(text="Завантаження тегів…"))
+                self.after(0, lambda: self.load_items_btn.config(text="Теги…"))
                 fetch_my_tags(token)
 
-            self.after(0, lambda: self.load_items_btn.config(text="Завантаження лотів…"))
+            self.after(0, lambda: self.load_items_btn.config(text="Завантаження…"))
             all_items = fetch_all_my_items(token)
 
-            tag_cache: dict[str, list[dict]] = {}
-            total_tags = len(_tag_id_map)
-            for i, (tag_name, tag_id) in enumerate(_tag_id_map.items(), 1):
-                self.after(0, lambda i=i, n=tag_name: self.load_items_btn.config(
-                    text=f"Тег {i}/{total_tags}: {n[:15]}…"))
-                tag_cache[tag_name] = fetch_items_by_tag(token, tag_id)
+            # будуємо індекс tag_name→[items] з даних самих лотів
+            # id_to_name: перевертаємо _tag_id_map
+            id_to_name = {v: k for k, v in _tag_id_map.items()}
+            tag_cache: dict[str, list[dict]] = {name: [] for name in _tag_id_map}
+            for it in all_items:
+                for t in (it.get("tags") or []):
+                    tid = None
+                    if isinstance(t, dict):
+                        tid = t.get("tag_id") or t.get("id")
+                    elif isinstance(t, int):
+                        tid = t
+                    if tid and tid in id_to_name:
+                        tag_cache[id_to_name[tid]].append(it)
 
             _tag_items_cache = tag_cache
             self.after(0, self._apply_items_cache, all_items)
