@@ -712,6 +712,7 @@ class App(tk.Tk):
             return
 
         # якщо кеш порожній — завантажуємо
+        global _tag_items_cache
         if not _tag_items_cache:
             try:
                 if not _tag_id_map:
@@ -720,7 +721,6 @@ class App(tk.Tk):
                 tag_cache: dict[str, list[dict]] = {}
                 for tag_name, tag_id in _tag_id_map.items():
                     tag_cache[tag_name] = fetch_items_by_tag(token, tag_id)
-                global _tag_items_cache
                 _tag_items_cache = tag_cache
                 self.after(0, self._apply_items_cache, all_items)
             except Exception as exc:
