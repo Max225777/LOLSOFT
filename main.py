@@ -112,32 +112,30 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
 
 
 def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
-    """Завантажує ВСІ активні лоти юзера (з пагінацією через offset)."""
+    """Завантажує ВСІ активні лоти юзера (пагінація page=1,2,3...)."""
     result   = []
-    offset   = 0
-    limit    = 50
     seen_ids = set()
-    while True:
-        url  = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active&limit={limit}&offset={offset}"
+    page     = 1
+    while page <= 100:   # max 100 сторінок = ~4000 лотів
+        url  = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active&page={page}"
         resp = requests.get(url, headers=_headers(token), timeout=30)
         resp.raise_for_status()
-        data  = resp.json()
-        items = data.get("items", [])
+        items = resp.json().get("items", [])
         if log_fn:
-            log_fn(f"[DEBUG] offset={offset} → отримано {len(items)} лотів")
+            log_fn(f"[DEBUG] page={page} → {len(items)} лотів")
         if not items:
             break
-        new_items = [it for it in items if it.get("item_id") not in seen_ids]
-        if not new_items:
-            if log_fn:
-                log_fn(f"[DEBUG] offset={offset} → всі дублікати, зупинка")
+        added = 0
+        for it in items:
+            iid = it.get("item_id")
+            if iid not in seen_ids:
+                seen_ids.add(iid)
+                result.append(it)
+                added += 1
+        if added == 0:
+            # всі дублікати — API більше нічого нового не дає
             break
-        for it in new_items:
-            seen_ids.add(it.get("item_id"))
-        result.extend(new_items)
-        offset += len(items)
-        if offset > 5000:
-            break
+        page += 1
     return result
 
 
