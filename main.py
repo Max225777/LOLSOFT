@@ -205,16 +205,17 @@ def bump_item(token: str, item_id: str) -> tuple[bool, str]:
             msg = resp.text[:100]
         code = resp.status_code
         ml   = msg.lower()
+        raw  = f"[{code}] {msg[:80]}"
         if "лимит" in ml or "limit" in ml or ("bump" in ml and "0" in ml):
-            return False, f"ліміт: {msg[:60]}"
+            return False, f"ліміт: {raw}"
         if (code == 429 or "cooldown" in ml or "flood" in ml or "wait" in ml
                 or "подожд" in ml or "нужно" in ml or "зачекайте" in ml):
-            return False, "кулдаун"
+            return False, f"кулдаун: {raw}"
         if code == 404 or "not found" in ml or "deleted" in ml or "sold" in ml:
-            return False, "продано/видалено"
+            return False, f"продано/видалено: {raw}"
         if code == 403:
-            return False, f"ліміт: {msg[:60] or 'HTTP 403'}"
-        return False, msg[:80] or f"HTTP {code}"
+            return False, f"ліміт: {raw}"
+        return False, raw
     except Exception as e:
         return False, str(e)[:80]
 
@@ -853,13 +854,13 @@ class App(tk.Tk):
                 self._add_log(f"✅ [{tag}] {title}  {now_str}")
                 self.after(0, self.bump_status_var.set, f"↑ «{tag}» підняв лот  {now_str}")
                 break
-            elif reason == "продано/видалено":
+            elif reason.startswith("продано/видалено"):
                 self._items_cache = [x for x in self._items_cache
                                      if str(x.get("item_id","")) != iid]
                 self.after(0, self._update_all_tag_counts)
                 my_items = items_for_tag(self._items_cache, tag)
                 total = len(my_items)
-                self._add_log(f"🗑 [{tag}] {title} — продано/видалено  {now_str}")
+                self._add_log(f"🗑 [{tag}] {title} — {reason}  {now_str}")
                 if total == 0:
                     break
                 idx = idx % total
@@ -867,7 +868,7 @@ class App(tk.Tk):
                 self._add_log(f"🚫 [{tag}] {title} — {reason}  {now_str}")
                 idx = (idx + 1) % total
                 self._tag_bump_idx[tag] = idx
-            elif reason == "кулдаун":
+            elif reason.startswith("кулдаун"):
                 self.after(0, self.bump_status_var.set,
                            f"⏳ «{tag}» #{idx+1} кулдаун, чекаю 3с…")
                 time.sleep(3)
