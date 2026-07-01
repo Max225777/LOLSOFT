@@ -435,13 +435,19 @@ class App(tk.Tk):
                                highlightbackground=BORDER)
         cycle_panel.pack(side="left", fill="both", expand=True, padx=(20, 0))
 
-        tk.Label(cycle_panel, text="Підняті за поточний цикл",
+        cycle_hdr = tk.Frame(cycle_panel, bg=CARD)
+        cycle_hdr.pack(fill="x", padx=4, pady=(4, 2))
+        tk.Label(cycle_hdr, text="Підняті за поточний цикл",
                  bg=CARD, fg=ACCENT, font=("Segoe UI", 9, "bold")
-                 ).pack(anchor="w", padx=6, pady=(4, 2))
+                 ).pack(side="left", padx=2)
+        tk.Button(cycle_hdr, text="📋 Копіювати", command=self._copy_logs,
+                  bg=BORDER, fg=TEXT, relief="flat", cursor="hand2",
+                  font=("Segoe UI", 8), activebackground=CARD,
+                  ).pack(side="right", padx=2)
 
         self.cycle_log_box = tk.Listbox(
             cycle_panel, bg=CARD, fg=TEXT, selectbackground=BORDER,
-            relief="flat", font=("Segoe UI", 9), height=5,
+            relief="flat", font=("Consolas", 9), height=5,
             activestyle="none", highlightthickness=0,
         )
         self.cycle_log_box.pack(fill="both", expand=True, padx=4, pady=(0, 4))
@@ -674,42 +680,43 @@ class App(tk.Tk):
             self._advance_cycle(active_tags)
             return
 
-        bumped_ids = set()
+        # Перебираємо лоти з тегом по черзі.
+        # Як тільки один успішно піднявся — зупиняємось.
+        # Якщо лот на кулдауні — пробуємо наступний.
         log_lines = []
-        errors: dict[str, str] = {}
+        bumped_id = None
+        all_errors: list[str] = []
 
         for item_id in my_ids:
+            title = fetch_item_title(token, item_id)
             ok, reason = bump_item(token, item_id)
             if ok:
-                bumped_ids.add(item_id)
+                bumped_id = item_id
                 self._bump_count += 1
-                title = fetch_item_title(token, item_id)
+                self._last_auto_bumped = {item_id}
                 log_lines.append(f"✅ [{tag}] {title}  {now_str}")
+                break
             else:
-                errors[item_id] = reason
+                all_errors.append(f"⛔ [{tag}] {title} — {reason}  {now_str}")
 
-        self._last_auto_bumped = bumped_ids
-
-        # Додаємо помилки в лог
-        for item_id, reason in errors.items():
-            log_lines.append(f"⛔ [{tag}] #{item_id} — {reason}  {now_str}")
+        # Якщо жоден не піднявся — логуємо всі помилки
+        if not bumped_id:
+            log_lines = all_errors or [f"⚠ [{tag}] всі лоти на кулдауні / помилка  {now_str}"]
+            self._last_auto_bumped = set()
 
         if log_lines:
-            self._cycle_log = (log_lines + self._cycle_log)[:60]
+            self._cycle_log = (log_lines + self._cycle_log)[:80]
             self.after(0, self._refresh_cycle_log)
 
         self.after(0, self.bump_count_var.set, f"Підняттів скриптом: {self._bump_count}")
 
-        if bumped_ids:
+        if bumped_id:
             self.after(0, self.bump_status_var.set,
-                       f"↑ «{tag}»: підняв {len(bumped_ids)} лот(ів) о {now_str}")
-        elif errors:
-            first_err = next(iter(errors.values()))
-            self.after(0, self.bump_status_var.set,
-                       f"⛔ «{tag}»: {first_err}")
+                       f"↑ «{tag}»: підняв лот о {now_str}")
         else:
+            msg = all_errors[0].split("—")[1].strip() if all_errors else "кулдаун"
             self.after(0, self.bump_status_var.set,
-                       f"⚠ «{tag}»: нема лотів для підняття")
+                       f"⛔ «{tag}»: {msg.split()[0]}")
 
         self._advance_cycle(active_tags)
 
@@ -724,6 +731,12 @@ class App(tk.Tk):
         self.cycle_log_box.delete(0, "end")
         for line in self._cycle_log:
             self.cycle_log_box.insert("end", line)
+
+    def _copy_logs(self):
+        text = "\n".join(self._cycle_log)
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.cycle_status_var.set("✅ Логи скопійовано в буфер")
 
     # ── Populate ─────────────────────────────────────────────────────────────
     def _populate(self, listings: list[dict]):
