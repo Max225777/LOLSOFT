@@ -112,20 +112,17 @@ def fetch_my_tags(token: str) -> tuple[list[str], str]:
 
 
 def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
-    """Завантажує ВСІ активні лоти юзера (пагінація через lastItemId)."""
-    result      = []
-    seen_ids    = set()
-    last_id     = None
-    iteration   = 0
-    while iteration < 100:
-        url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
-        if last_id is not None:
-            url += f"&lastItemId={last_id}"
-        resp  = requests.get(url, headers=_headers(token), timeout=30)
+    """Завантажує ВСІ активні лоти юзера через /user/items з пагінацією."""
+    result   = []
+    seen_ids = set()
+    page     = 1
+    while page <= 100:
+        url  = f"{API_BASE}/user/items?page={page}"
+        resp = requests.get(url, headers=_headers(token), timeout=30)
         resp.raise_for_status()
         items = resp.json().get("items", [])
         if log_fn:
-            log_fn(f"[DEBUG] iter={iteration} lastItemId={last_id} → {len(items)} лотів")
+            log_fn(f"[DEBUG] page={page} → {len(items)} лотів")
         if not items:
             break
         added = 0
@@ -135,10 +132,9 @@ def fetch_all_my_items(token: str, log_fn=None) -> list[dict]:
                 seen_ids.add(iid)
                 result.append(it)
                 added += 1
-                last_id = iid
         if added == 0:
             break
-        iteration += 1
+        page += 1
     return result
 
 
