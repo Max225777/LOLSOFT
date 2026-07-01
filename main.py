@@ -383,10 +383,6 @@ class App(tk.Tk):
                    bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
                    font=("Segoe UI", 9)).pack(side="left", padx=(0,10))
 
-        self.cycle_status_var = tk.StringVar(value="")
-        tk.Label(bh, textvariable=self.cycle_status_var,
-                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 9)).pack(side="left", padx=(0,10))
-
         # кнопки завантаження
         self.load_tags_btn = tk.Button(
             bh, text="🔄 Теги", command=self._load_tags,
@@ -400,9 +396,15 @@ class App(tk.Tk):
             font=("Segoe UI", 9), activebackground=BORDER)
         self.load_items_btn.pack(side="left")
 
+        # рядок статусу кешу (окремо від кнопок)
+        bh2 = tk.Frame(self, bg=BG)
+        bh2.pack(fill="x", padx=16, pady=(0, 2))
+        self.cycle_status_var = tk.StringVar(value="")
+        tk.Label(bh2, textvariable=self.cycle_status_var,
+                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 9), anchor="w").pack(side="left")
         self.cache_info_var = tk.StringVar(value="")
-        tk.Label(bh, textvariable=self.cache_info_var,
-                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 8)).pack(side="left", padx=(8,0))
+        tk.Label(bh2, textvariable=self.cache_info_var,
+                 bg=BG, fg=SUBTEXT, font=("Segoe UI", 8), anchor="w").pack(side="left", padx=(12,0))
 
         # ── Блок тегів + лог ──
         bump_body = tk.Frame(self, bg=BG)
