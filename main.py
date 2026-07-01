@@ -387,6 +387,13 @@ class App(tk.Tk):
         tk.Label(bump_header, textvariable=self.cycle_status_var,
                  bg=BG, fg=SUBTEXT, font=("Segoe UI", 9)).pack(side="left", padx=(0, 12))
 
+        tk.Label(bump_header, text="Моїх у топ:", bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 9)).pack(side="left", padx=(12, 2))
+        self.top_n_var = tk.IntVar(value=1)
+        tk.Spinbox(bump_header, from_=1, to=20, textvariable=self.top_n_var, width=3,
+                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                   font=("Segoe UI", 9)).pack(side="left", padx=(0, 12))
+
         # кнопка завантажити теги
         self.load_tags_btn = tk.Button(
             bump_header, text="🔄 Завантажити теги", command=self._load_tags,
@@ -743,9 +750,15 @@ class App(tk.Tk):
         self._listing_data = listings
 
         if self.autobump_var.get():
-            threading.Thread(
-                target=self._do_auto_bump, args=(listings,), daemon=True
-            ).start()
+            top_n = self.top_n_var.get()
+            mine_in_top = sum(1 for l in listings[:top_n] if l["is_mine"])
+            if mine_in_top >= top_n:
+                now_s = datetime.now().strftime("%H:%M:%S")
+                self.cycle_status_var.set(f"✅ Топ-{top_n} вже наш — бамп пропущено  [{now_s}]")
+            else:
+                threading.Thread(
+                    target=self._do_auto_bump, args=(listings,), daemon=True
+                ).start()
 
         try:
             events = record_snapshot(listings, self._last_auto_bumped)
