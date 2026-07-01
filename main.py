@@ -352,8 +352,8 @@ class App(tk.Tk):
             self.tags_cfg.append((tag_var, count_var))
 
         self.bump_status_var = tk.StringVar(value="")
-        tk.Label(bump_row, textvariable=self.bump_status_var, bg=BG, fg=SUBTEXT,
-                 font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(tags_frame, textvariable=self.bump_status_var, bg=BG, fg=SUBTEXT,
+                 font=("Segoe UI", 9)).pack(anchor="w", padx=2)
 
         # Статус
         self.status_var = tk.StringVar(value="Введи токен і натисни «Пошук»")
