@@ -642,11 +642,13 @@ class App(tk.Tk):
             txt = self.clipboard_get()
         except tk.TclError:
             return
+        # залишаємо тільки перший рядок (захист від випадкової вставки коду)
+        txt = txt.splitlines()[0].strip() if txt.strip() else ""
         try:
             entry.delete("sel.first","sel.last")
         except tk.TclError:
             pass
-        entry.insert("insert", txt.strip())
+        entry.insert("insert", txt)
 
     def _toggle_token(self):
         self._show_token = not self._show_token
