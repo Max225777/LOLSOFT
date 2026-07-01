@@ -83,8 +83,8 @@ def fetch_listings(market_url: str, token: str, count: int) -> list[dict]:
     return parsed
 
 
-def fetch_my_tags(token: str) -> list[str]:
-    """Повертає унікальні теги з активних лотів юзера."""
+def fetch_my_tags(token: str) -> tuple[list[str], str]:
+    """Повертає (унікальні теги, raw sample першого айтема для дебагу)."""
     url = f"{API_BASE}/?user_id={MY_PROFILE_ID}&status=active"
     headers = {
         "Authorization": f"Bearer {token.strip()}",
@@ -93,14 +93,24 @@ def fetch_my_tags(token: str) -> list[str]:
     }
     resp = requests.get(url, headers=headers, timeout=20)
     resp.raise_for_status()
+    data = resp.json()
+    items = data.get("items", [])
+    raw_sample = str(items[0] if items else data)[:200]
+
     tags = set()
-    for it in resp.json().get("items", []):
+    for it in items:
         for t in (it.get("tags") or []):
             if isinstance(t, str) and t.strip():
                 tags.add(t.strip())
-            elif isinstance(t, dict) and t.get("name"):
-                tags.add(t["name"].strip())
-    return sorted(tags)
+            elif isinstance(t, dict):
+                name = (t.get("name") or t.get("title") or
+                        t.get("tag_name") or t.get("label") or "").strip()
+                if name:
+                    tags.add(name)
+        single = it.get("tag")
+        if isinstance(single, str) and single.strip():
+            tags.add(single.strip())
+    return sorted(tags), raw_sample
 
 
 def fetch_my_listings(token: str, tag: str) -> list[str]:
@@ -505,21 +515,20 @@ class App(tk.Tk):
 
     def _do_load_tags(self, token: str):
         try:
-            tags = fetch_my_tags(token)
-            self.after(0, self._apply_tags, tags)
+            tags, raw_sample = fetch_my_tags(token)
+            self.after(0, self._apply_tags, tags, raw_sample)
         except Exception as exc:
             self.after(0, self.cycle_status_var.set, f"⚠ Теги: {exc}")
             self.after(0, self.load_tags_btn.config, {"state": "normal", "text": "🔄 Завантажити теги"})
 
-    def _apply_tags(self, tags: list[str]):
-        for tag_var, _ in self.tags_cfg:
-            # знаходимо відповідний Combobox по tag_var
-            pass
-        # оновлюємо values у всіх Combobox
+    def _apply_tags(self, tags: list[str], raw_sample: str = ""):
         for widget in self._iter_comboboxes():
             widget["values"] = tags
         self.load_tags_btn.config(state="normal", text="🔄 Завантажити теги")
-        self.cycle_status_var.set(f"Теги завантажено: {', '.join(tags) if tags else '(порожньо)'}")
+        if tags:
+            self.cycle_status_var.set(f"Теги завантажено: {', '.join(tags)}")
+        else:
+            self.cycle_status_var.set(f"Теги не знайдено. Структура: {raw_sample[:120]}")
 
     def _iter_comboboxes(self):
         """Збирає всі Combobox з bump_body → tags_frame."""
