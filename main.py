@@ -489,6 +489,8 @@ class App(tk.Tk):
         # global Ctrl+V paste for all Entry/Combobox widgets
         self.bind_all("<Control-v>", self._global_paste)
         self.bind_all("<Control-V>", self._global_paste)
+        self.bind_all("<Control-a>", self._global_select_all)
+        self.bind_all("<Control-A>", self._global_select_all)
 
     def _build_market_panel(self, idx: int, mkt: dict):
         panel = tk.Frame(self._mkt_content, bg=BG)
@@ -825,12 +827,20 @@ class App(tk.Tk):
         except tk.TclError:
             return
         txt = txt.splitlines()[0].strip() if txt.strip() else ""
+        # replace selected text or full content if nothing selected
         try:
             w.delete("sel.first", "sel.last")
         except tk.TclError:
-            pass
-        w.insert("insert", txt)
+            w.delete(0, "end")
+        w.insert(0, txt)
         return "break"
+
+    def _global_select_all(self, event):
+        w = event.widget
+        if isinstance(w, (tk.Entry, ttk.Combobox)):
+            w.select_range(0, "end")
+            w.icursor("end")
+            return "break"
 
     def _enable_paste(self, entry: tk.Entry):
         menu = tk.Menu(self, tearoff=0, bg=CARD, fg=TEXT,
