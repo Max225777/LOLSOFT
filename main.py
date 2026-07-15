@@ -511,11 +511,13 @@ class App(tk.Tk):
 
         tk.Label(r1, text="URL:", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left")
         url_var = tk.StringVar(value=mkt.get("url", DEFAULT_URL))
-        tk.Entry(r1, textvariable=url_var,
+        url_entry = tk.Entry(r1, textvariable=url_var,
             bg=CARD, fg=TEXT, insertbackground=TEXT, relief="flat",
             font=("Segoe UI",9), highlightthickness=1,
-            highlightbackground=BORDER, highlightcolor=ACCENT
-            ).pack(side="left", fill="x", expand=True, padx=(4,8), ipady=3)
+            highlightbackground=BORDER, highlightcolor=ACCENT)
+        url_entry.pack(side="left", fill="x", expand=True, padx=(4,8), ipady=3)
+        self._enable_paste(url_entry)
+        self._enable_paste(name_entry)
 
         tk.Label(r1, text="Лотів:", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left")
         count_var = tk.IntVar(value=mkt.get("count", 10))
@@ -859,11 +861,13 @@ class App(tk.Tk):
         except tk.TclError:
             return
         txt = txt.splitlines()[0].strip() if txt.strip() else ""
+        # if text is selected — replace selection; otherwise replace everything
         try:
-            entry.delete("sel.first","sel.last")
+            entry.delete("sel.first", "sel.last")
+            entry.insert("insert", txt)
         except tk.TclError:
-            pass
-        entry.insert("insert", txt)
+            entry.delete(0, "end")
+            entry.insert(0, txt)
 
     def _toggle_token(self):
         self._show_token = not self._show_token
