@@ -868,6 +868,14 @@ class App(tk.Tk):
         if not token:
             self._schedule_autobump()
             return
+        # auto-refresh active market listing table
+        if self._markets:
+            mkt = self._markets[self._active_mkt]
+            url = mkt.get("url", "")
+            count = mkt.get("count", 10)
+            if url:
+                threading.Thread(target=self._do_search,
+                                 args=(url, token, count), daemon=True).start()
         # run bump for all markets in parallel threads
         for mkt in self._markets:
             threading.Thread(target=self._bump_market, args=(token, mkt), daemon=True).start()
@@ -922,6 +930,23 @@ class App(tk.Tk):
             self.after(0, self._add_log, f"⚠ [{name}][{tag}] лоти не в кеші  {now_str}")
             self._advance_mkt_cycle(st, active_tags)
             return
+
+        # check if we're already in top_n — if so, skip bump
+        top_n   = mkt.get("top_n", 1)
+        mkt_url = mkt.get("url", "")
+        if mkt_url and top_n > 0:
+            try:
+                top_listings = fetch_listings(mkt_url, token, top_n)
+                top_ids  = {lot["id"] for lot in top_listings[:top_n]}
+                my_ids   = {str(it.get("item_id","")) for it in my_items}
+                if top_ids & my_ids:
+                    self.after(0, self._add_log,
+                               f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск  {now_str}")
+                    self.after(0, self.bump_status_var.set, f"✅ [{name}] в топ-{top_n}")
+                    self._advance_mkt_cycle(st, active_tags)
+                    return
+            except Exception:
+                pass  # if check fails — bump anyway
 
         MAX_TRIES    = 10
         total        = len(my_items)
