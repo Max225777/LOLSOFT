@@ -277,11 +277,14 @@ def stat_summary() -> dict:
 # ─── App ──────────────────────────────────────────────────────────────────────
 def _default_market(name="УА ринок", url=None) -> dict:
     return {
-        "name": name,
-        "url":  url or DEFAULT_URL,
-        "tags": [{"tag":"","count":1}, {"tag":"","count":1}, {"tag":"","count":1}],
-        "count": 10,
-        "top_n": 1,
+        "name":             name,
+        "url":              url or DEFAULT_URL,
+        "tags":             [{"tag":"","count":1}, {"tag":"","count":1}, {"tag":"","count":1}],
+        "count":            10,
+        "top_n":            1,
+        "refresh_interval": 60,
+        "bump_interval":    60,
+        "enabled":          True,
     }
 
 class App(tk.Tk):
@@ -304,6 +307,9 @@ class App(tk.Tk):
 
         # bump state per market name
         self._mkt_bump: dict[str, dict]  = {}
+        # per-market after() job ids
+        self._mkt_refresh_jobs: dict[str, str] = {}
+        self._mkt_bump_jobs:    dict[str, str] = {}
 
         self._cfg = load_config()
 
@@ -367,10 +373,13 @@ class App(tk.Tk):
             def _int(v, d=1):
                 try: return v.get()
                 except: return d
-            self._markets[i]["name"]  = mv["name_var"].get().strip()
-            self._markets[i]["url"]   = mv["url_var"].get().strip()
-            self._markets[i]["count"] = _int(mv["count_var"], 10)
-            self._markets[i]["top_n"] = _int(mv["top_n_var"], 1)
+            self._markets[i]["name"]             = mv["name_var"].get().strip()
+            self._markets[i]["url"]              = mv["url_var"].get().strip()
+            self._markets[i]["count"]            = _int(mv["count_var"], 10)
+            self._markets[i]["top_n"]            = _int(mv["top_n_var"], 1)
+            self._markets[i]["refresh_interval"] = _int(mv["refresh_interval_var"], 60)
+            self._markets[i]["bump_interval"]    = _int(mv["bump_interval_var"], 60)
+            self._markets[i]["enabled"]          = mv["enabled_var"].get()
             for j, (tv, cv) in enumerate(mv["tag_vars"]):
                 self._markets[i]["tags"][j] = {"tag": tv.get().strip(), "count": _int(cv, 1)}
 
@@ -538,11 +547,35 @@ class App(tk.Tk):
         search_btn.pack(side="left", padx=(0,6))
 
         if len(self._markets) > 0:
-            del_btn = tk.Button(r1, text="✕ Видалити ринок",
+            del_btn = tk.Button(r1, text="✕ Видалити",
                 command=lambda i=idx: self._remove_market(i),
                 bg=CARD, fg=RED_FG, relief="flat", cursor="hand2",
                 font=("Segoe UI",8), activebackground=BORDER)
             del_btn.pack(side="left")
+
+        # Row 1b: intervals + enabled toggle
+        r1b = tk.Frame(panel, bg=BG)
+        r1b.pack(fill="x", pady=(0,3))
+
+        enabled_var = tk.BooleanVar(value=mkt.get("enabled", True))
+        tk.Checkbutton(r1b, text="Активний", variable=enabled_var,
+                       bg=BG, fg=ACCENT, selectcolor=CARD,
+                       activebackground=BG, activeforeground=ACCENT,
+                       font=("Segoe UI",9), cursor="hand2").pack(side="left", padx=(0,16))
+
+        tk.Label(r1b, text="Оновлення кожні:", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left")
+        refresh_interval_var = tk.IntVar(value=mkt.get("refresh_interval", 60))
+        tk.Spinbox(r1b, from_=10, to=3600, textvariable=refresh_interval_var, width=5,
+                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                   font=("Segoe UI",9)).pack(side="left", padx=(4,2))
+        tk.Label(r1b, text="сек", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left", padx=(0,16))
+
+        tk.Label(r1b, text="Підняття кожні:", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left")
+        bump_interval_var = tk.IntVar(value=mkt.get("bump_interval", 60))
+        tk.Spinbox(r1b, from_=10, to=3600, textvariable=bump_interval_var, width=5,
+                   bg=CARD, fg=TEXT, buttonbackground=BORDER, relief="flat",
+                   font=("Segoe UI",9)).pack(side="left", padx=(4,2))
+        tk.Label(r1b, text="сек", bg=BG, fg=SUBTEXT, font=("Segoe UI",9)).pack(side="left")
 
         # Row 2: tags
         r2 = tk.Frame(panel, bg=BG)
@@ -578,30 +611,36 @@ class App(tk.Tk):
             cv.trace_add("write", self._save_config)
 
         mv = {
-            "name_var":       name_var,
-            "url_var":        url_var,
-            "count_var":      count_var,
-            "top_n_var":      top_n_var,
-            "tag_vars":       tag_vars,
-            "tag_count_vars": tag_count_vars,
-            "search_btn":     search_btn,
+            "name_var":             name_var,
+            "url_var":              url_var,
+            "count_var":            count_var,
+            "top_n_var":            top_n_var,
+            "refresh_interval_var": refresh_interval_var,
+            "bump_interval_var":    bump_interval_var,
+            "enabled_var":          enabled_var,
+            "tag_vars":             tag_vars,
+            "tag_count_vars":       tag_count_vars,
+            "search_btn":           search_btn,
         }
         self._mkt_vars.append(mv)
-        name_var.trace_add("write", self._save_config)
-        url_var.trace_add("write",  self._save_config)
-        count_var.trace_add("write", self._save_config)
-        top_n_var.trace_add("write", self._save_config)
+        for v in (name_var, url_var, count_var, top_n_var,
+                  refresh_interval_var, bump_interval_var, enabled_var):
+            v.trace_add("write", self._save_config)
+        enabled_var.trace_add("write", lambda *_: (self._sync_vars_to_markets(), self._rebuild_tabs()))
 
     def _rebuild_tabs(self):
         for w in self._tabs_frame.winfo_children():
             w.destroy()
         for i, mkt in enumerate(self._markets):
-            name = mkt.get("name") or f"Ринок {i+1}"
-            active = (i == self._active_mkt)
-            tk.Button(self._tabs_frame, text=name,
+            name     = mkt.get("name") or f"Ринок {i+1}"
+            enabled  = mkt.get("enabled", True)
+            active   = (i == self._active_mkt)
+            label    = name if enabled else f"⏸ {name}"
+            tab_bg   = ACCENT if active else (CARD if enabled else BORDER)
+            tab_fg   = "#1a1a1a" if active else (TEXT if enabled else SUBTEXT)
+            tk.Button(self._tabs_frame, text=label,
                 command=lambda i=i: self._show_market(i),
-                bg=ACCENT if active else CARD,
-                fg="#1a1a1a" if active else TEXT,
+                bg=tab_bg, fg=tab_fg,
                 relief="flat", cursor="hand2",
                 font=("Segoe UI",9,"bold" if active else "normal"),
                 padx=10, pady=4, activebackground=ACCENT_D
@@ -898,57 +937,62 @@ class App(tk.Tk):
 
     # ── Auto-refresh ──────────────────────────────────────────────────────────
     def _toggle_autorefresh(self):
+        # cancel all per-market refresh jobs
+        for job in self._mkt_refresh_jobs.values():
+            try: self.after_cancel(job)
+            except Exception: pass
+        self._mkt_refresh_jobs.clear()
         if self.autorefresh_var.get():
-            self._schedule_autorefresh()
-        elif self._refresh_job:
-            self.after_cancel(self._refresh_job)
-            self._refresh_job = None
+            for mkt in self._markets:
+                self._schedule_mkt_refresh(mkt)
 
-    def _schedule_autorefresh(self):
-        def _int(v, d):
-            try: return v.get()
-            except: return d
-        interval = max(10, _int(self.interval_var, 60))
-        self._refresh_job = self.after(interval * 1000, self._refresh_tick)
+    def _schedule_mkt_refresh(self, mkt: dict):
+        name     = mkt.get("name", "?")
+        interval = max(10, mkt.get("refresh_interval", 60))
+        job = self.after(interval * 1000, lambda m=mkt: self._refresh_tick(m))
+        self._mkt_refresh_jobs[name] = job
 
-    def _refresh_tick(self):
+    def _refresh_tick(self, mkt: dict):
         if not self.autorefresh_var.get():
             return
+        if not mkt.get("enabled", True):
+            self._schedule_mkt_refresh(mkt)
+            return
         token = self.token_var.get().strip()
-        if token and self._markets:
-            mkt   = self._markets[self._active_mkt]
+        if token:
             url   = mkt.get("url", "")
             count = mkt.get("count", 10)
-            if url:
+            if url and mkt is self._markets[self._active_mkt]:
                 threading.Thread(target=self._do_search,
                                  args=(url, token, count), daemon=True).start()
-        self._schedule_autorefresh()
+        self._schedule_mkt_refresh(mkt)
 
     # ── Auto-bump ─────────────────────────────────────────────────────────────
     def _toggle_autobump(self):
+        for job in self._mkt_bump_jobs.values():
+            try: self.after_cancel(job)
+            except Exception: pass
+        self._mkt_bump_jobs.clear()
         if self.autobump_var.get():
-            self._schedule_autobump()
-        elif self._auto_job:
-            self.after_cancel(self._auto_job)
-            self._auto_job = None
+            for mkt in self._markets:
+                self._schedule_mkt_bump(mkt)
 
-    def _schedule_autobump(self):
-        def _int(v, d):
-            try: return v.get()
-            except: return d
-        interval = max(10, _int(self.interval_var, 60))
-        self._auto_job = self.after(interval * 1000, self._auto_tick)
+    def _schedule_mkt_bump(self, mkt: dict):
+        name     = mkt.get("name", "?")
+        interval = max(10, mkt.get("bump_interval", 60))
+        job = self.after(interval * 1000, lambda m=mkt: self._auto_tick(m))
+        self._mkt_bump_jobs[name] = job
 
-    def _auto_tick(self):
+    def _auto_tick(self, mkt: dict):
         if not self.autobump_var.get():
             return
-        token = self.token_var.get().strip()
-        if not token:
-            self._schedule_autobump()
+        if not mkt.get("enabled", True):
+            self._schedule_mkt_bump(mkt)
             return
-        for mkt in self._markets:
+        token = self.token_var.get().strip()
+        if token:
             threading.Thread(target=self._bump_market, args=(token, mkt), daemon=True).start()
-        self._schedule_autobump()
+        self._schedule_mkt_bump(mkt)
 
     def _bump_market(self, token: str, mkt: dict):
         name = mkt.get("name","?")
