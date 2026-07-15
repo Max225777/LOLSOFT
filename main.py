@@ -293,6 +293,7 @@ class App(tk.Tk):
 
         self._listing_data: list[dict]   = []
         self._auto_job                   = None
+        self._refresh_job                = None
         self._cache_job                  = None
         self._show_token                 = False
         self._bump_count                 = 0
@@ -336,10 +337,13 @@ class App(tk.Tk):
             self.token_var.set(c["token"])
         if c.get("interval"):
             self.interval_var.set(c["interval"])
+        if c.get("autorefresh"):
+            self.autorefresh_var.set(True)
+            self._toggle_autorefresh()
         if c.get("autobump"):
             self.autobump_var.set(True)
             self._toggle_autobump()
-        for var in (self.token_var, self.interval_var, self.autobump_var):
+        for var in (self.token_var, self.interval_var, self.autorefresh_var, self.autobump_var):
             var.trace_add("write", self._save_config)
 
     def _save_config(self, *_):
@@ -348,10 +352,11 @@ class App(tk.Tk):
             except Exception: return default
         self._sync_vars_to_markets()
         cfg = {
-            "token":    self.token_var.get().strip(),
-            "interval": _int(self.interval_var, 60),
-            "autobump": self.autobump_var.get(),
-            "markets":  self._markets,
+            "token":       self.token_var.get().strip(),
+            "interval":    _int(self.interval_var, 60),
+            "autorefresh": self.autorefresh_var.get(),
+            "autobump":    self.autobump_var.get(),
+            "markets":     self._markets,
         }
         save_config(cfg)
 
@@ -401,8 +406,15 @@ class App(tk.Tk):
         gr = tk.Frame(self, bg=BG)
         gr.pack(fill="x", padx=16, pady=(4,2))
 
+        self.autorefresh_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(gr, text="Авто-оновлення", variable=self.autorefresh_var,
+                       command=self._toggle_autorefresh,
+                       bg=BG, fg=ACCENT, selectcolor=CARD,
+                       activebackground=BG, activeforeground=ACCENT,
+                       font=("Segoe UI",10), cursor="hand2").pack(side="left", padx=(0,10))
+
         self.autobump_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(gr, text="Авто-підняття (всі ринки)", variable=self.autobump_var,
+        tk.Checkbutton(gr, text="Авто-підняття", variable=self.autobump_var,
                        command=self._toggle_autobump,
                        bg=BG, fg=YELLOW, selectcolor=CARD,
                        activebackground=BG, activeforeground=YELLOW,
@@ -846,6 +858,34 @@ class App(tk.Tk):
         except Exception as exc:
             self.after(0, lambda: self.status_var.set(f"Помилка: {exc}"))
 
+    # ── Auto-refresh ──────────────────────────────────────────────────────────
+    def _toggle_autorefresh(self):
+        if self.autorefresh_var.get():
+            self._schedule_autorefresh()
+        elif self._refresh_job:
+            self.after_cancel(self._refresh_job)
+            self._refresh_job = None
+
+    def _schedule_autorefresh(self):
+        def _int(v, d):
+            try: return v.get()
+            except: return d
+        interval = max(10, _int(self.interval_var, 60))
+        self._refresh_job = self.after(interval * 1000, self._refresh_tick)
+
+    def _refresh_tick(self):
+        if not self.autorefresh_var.get():
+            return
+        token = self.token_var.get().strip()
+        if token and self._markets:
+            mkt   = self._markets[self._active_mkt]
+            url   = mkt.get("url", "")
+            count = mkt.get("count", 10)
+            if url:
+                threading.Thread(target=self._do_search,
+                                 args=(url, token, count), daemon=True).start()
+        self._schedule_autorefresh()
+
     # ── Auto-bump ─────────────────────────────────────────────────────────────
     def _toggle_autobump(self):
         if self.autobump_var.get():
@@ -868,15 +908,6 @@ class App(tk.Tk):
         if not token:
             self._schedule_autobump()
             return
-        # auto-refresh active market listing table
-        if self._markets:
-            mkt = self._markets[self._active_mkt]
-            url = mkt.get("url", "")
-            count = mkt.get("count", 10)
-            if url:
-                threading.Thread(target=self._do_search,
-                                 args=(url, token, count), daemon=True).start()
-        # run bump for all markets in parallel threads
         for mkt in self._markets:
             threading.Thread(target=self._bump_market, args=(token, mkt), daemon=True).start()
         self._schedule_autobump()
