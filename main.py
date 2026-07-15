@@ -473,14 +473,22 @@ class App(tk.Tk):
         tk.Button(lh, text="📋 Копіювати", command=self._copy_logs,
                   bg=BORDER, fg=TEXT, relief="flat", cursor="hand2",
                   font=("Segoe UI",8), activebackground=CARD).pack(side="right", padx=2)
-        self.cycle_log_box = tk.Listbox(log_wrap, bg=CARD, fg=TEXT,
-            selectbackground=BORDER, relief="flat",
-            font=("Consolas",9), height=4, activestyle="none", highlightthickness=0)
+        self.cycle_log_box = tk.Text(log_wrap, bg=CARD, fg=TEXT,
+            selectbackground="#3a4a60", selectforeground="#ffffff",
+            relief="flat", font=("Consolas",9), height=4,
+            highlightthickness=0, wrap="none", state="disabled",
+            cursor="xterm")
         self.cycle_log_box.pack(fill="x", padx=4, pady=(0,4))
+        # allow Ctrl+C to copy selected text from log
+        self.cycle_log_box.bind("<Control-c>", lambda e: None)
+        self.cycle_log_box.bind("<Control-C>", lambda e: None)
 
         # Listings + stats
         self._build_main_pane()
         self._enable_paste(self.token_entry)
+        # global Ctrl+V paste for all Entry/Combobox widgets
+        self.bind_all("<Control-v>", self._global_paste)
+        self.bind_all("<Control-V>", self._global_paste)
 
     def _build_market_panel(self, idx: int, mkt: dict):
         panel = tk.Frame(self._mkt_content, bg=BG)
@@ -808,6 +816,22 @@ class App(tk.Tk):
         return found
 
     # ── Token / paste ─────────────────────────────────────────────────────────
+    def _global_paste(self, event):
+        w = event.widget
+        if not isinstance(w, (tk.Entry, ttk.Combobox)):
+            return
+        try:
+            txt = self.clipboard_get()
+        except tk.TclError:
+            return
+        txt = txt.splitlines()[0].strip() if txt.strip() else ""
+        try:
+            w.delete("sel.first", "sel.last")
+        except tk.TclError:
+            pass
+        w.insert("insert", txt)
+        return "break"
+
     def _enable_paste(self, entry: tk.Entry):
         menu = tk.Menu(self, tearoff=0, bg=CARD, fg=TEXT,
                        activebackground=ACCENT, activeforeground="#1a1a1a")
@@ -1052,9 +1076,12 @@ class App(tk.Tk):
         self.after(0, self._refresh_log)
 
     def _refresh_log(self):
-        self.cycle_log_box.delete(0, "end")
-        for line in self._cycle_log:
-            self.cycle_log_box.insert("end", line)
+        box = self.cycle_log_box
+        box.config(state="normal")
+        box.delete("1.0", "end")
+        box.insert("end", "\n".join(self._cycle_log))
+        box.see("1.0")
+        box.config(state="disabled")
 
     def _copy_logs(self):
         self.clipboard_clear()
