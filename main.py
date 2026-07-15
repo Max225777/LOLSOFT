@@ -322,6 +322,7 @@ class App(tk.Tk):
 
         self._build_ui()
         self._apply_config()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _mkt_state(self, name: str) -> dict:
         if name not in self._mkt_bump:
@@ -549,6 +550,7 @@ class App(tk.Tk):
                        font=("Segoe UI",9)).pack(side="left", padx=(2,12))
             tag_vars.append((tv, cv))
             tv.trace_add("write", lambda *_, mi=idx, ti=j: self._update_tag_count_for(mi, ti))
+            tv.trace_add("write", self._save_config)
             cv.trace_add("write", self._save_config)
 
         mv = {
@@ -1074,6 +1076,10 @@ class App(tk.Tk):
         if not item:
             return
         webbrowser.open(self._listing_data[int(item)]["link"])
+
+    def _on_close(self):
+        self._save_config()
+        self.destroy()
 
 
 if __name__ == "__main__":
