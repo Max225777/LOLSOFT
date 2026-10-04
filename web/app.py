@@ -516,6 +516,18 @@ def get_stats():
 def get_logs():
     return broadcaster._log[-100:]
 
+@app.get("/api/bump-log")
+def get_bump_log():
+    conn = db_conn()
+    rows = conn.execute(
+        "SELECT market_name, tag, item_id, item_title, success, reason, logged_at"
+        " FROM bumps WHERE logged_at >= date('now','localtime')"
+        " ORDER BY logged_at DESC LIMIT 200"
+    ).fetchall()
+    conn.close()
+    return [{"market_name":r[0],"tag":r[1],"item_id":r[2],"item_title":r[3],
+             "success":bool(r[4]),"reason":r[5],"logged_at":r[6]} for r in rows]
+
 @app.post("/api/refresh-cache")
 def refresh_cache():
     threading.Thread(target=sched_mgr._warmup_cache, daemon=True).start()

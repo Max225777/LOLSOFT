@@ -156,9 +156,24 @@ tr:hover td{background:#1e1e1e}
     <div class="timeline-wrap"><canvas id="bump-chart"></canvas></div>
   </div>
 
-  <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
-    <div class="card-hd" style="margin-bottom:6px">Останні події</div>
-    <div class="logbox" id="log-dash" style="flex:1;min-height:120px;max-height:240px"></div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div class="card-hd" style="margin-bottom:0">Лог підняттів сьогодні</div>
+      <div class="spacer"></div>
+      <label style="display:flex;align-items:center;gap:4px">
+        <input type="checkbox" id="flt-ok" checked onchange="renderBumpLog()"/> <span style="color:var(--green)">✅ Успішні</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px">
+        <input type="checkbox" id="flt-fail" checked onchange="renderBumpLog()"/> <span style="color:var(--red)">⛔ Невдалі</span>
+      </label>
+      <button class="btn-s" onclick="loadBumpLog()">🔄</button>
+    </div>
+    <div class="tbl-wrap" style="max-height:260px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Час</th><th>Ринок</th><th>Тег</th><th>Лот</th><th>Результат</th><th>Причина</th></tr></thead>
+        <tbody id="bump-log-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:14px">Завантаження…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -321,19 +336,29 @@ function renderChart(data) {
     data: {
       labels,
       datasets: [
-        {label:'Успішні', data:okData,   backgroundColor:'#4caf5099', borderColor:'#4caf50', borderWidth:1, borderRadius:2},
-        {label:'Невдалі', data:failData, backgroundColor:'#ff525266', borderColor:'#ff5252', borderWidth:1, borderRadius:2},
+        {label:'✅ Успішні', data:okData,   backgroundColor:'#4caf50cc', borderColor:'#4caf50', borderWidth:1, stack:'s'},
+        {label:'⛔ Невдалі', data:failData, backgroundColor:'#ff5252cc', borderColor:'#ff5252', borderWidth:1, stack:'s'},
       ]
     },
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{
-        legend:{labels:{color:'#888',font:{size:11},boxWidth:12}},
-        tooltip:{callbacks:{title: items => 'Год. '+items[0].label}}
+        legend:{labels:{color:'#aaa',font:{size:11},boxWidth:12}},
+        tooltip:{
+          callbacks:{
+            title: items => 'Година: '+items[0].label,
+            footer: items => {
+              const h = items[0].dataIndex;
+              const ok = okData[h], fail = failData[h], total = ok+fail;
+              return total ? `Всього: ${total} | Успішних: ${ok} | Невдалих: ${fail}` : 'Немає даних';
+            }
+          }
+        }
       },
       scales:{
-        x:{stacked:false, ticks:{color:'#555',maxTicksLimit:16,font:{size:10}}, grid:{color:'#1e1e1e'}},
-        y:{stacked:false, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}, beginAtZero:true},
+        x:{stacked:true, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}},
+        y:{stacked:true, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}, beginAtZero:true,
+           title:{display:true,text:'Кількість підняттів',color:'#555',font:{size:10}}},
       }
     }
   });
@@ -629,12 +654,44 @@ function _paintLog(id, lines, scroll=true) {
 
 function clearLogs() { logLines=[]; _paintLog('log-full',[]); _paintLog('log-dash',[]); }
 
+// ── bump log table ────────────────────────────────────────────────────────────
+let bumpLogData = [];
+
+async function loadBumpLog() {
+  try {
+    bumpLogData = await api('/api/bump-log');
+    renderBumpLog();
+  } catch(e) { console.warn(e); }
+}
+
+function renderBumpLog() {
+  const showOk   = document.getElementById('flt-ok').checked;
+  const showFail = document.getElementById('flt-fail').checked;
+  const tb = document.getElementById('bump-log-body');
+  const rows = bumpLogData.filter(r => r.success ? showOk : showFail);
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--sub);text-align:center;padding:14px">Немає записів</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(r => `
+    <tr>
+      <td style="color:var(--sub);font-size:10px;white-space:nowrap">${r.logged_at.slice(11,19)}</td>
+      <td>${x(r.market_name||'')}</td>
+      <td>${x(r.tag||'')}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x(r.item_title||'')}">${x(r.item_title||r.item_id||'')}</td>
+      <td style="color:${r.success?'var(--green)':'var(--red)'};font-weight:600">${r.success?'✅':'⛔'}</td>
+      <td style="font-size:11px;color:var(--sub)">${x(r.reason||'')}</td>
+    </tr>`).join('');
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
   connectWS();
   await loadCfg();
   await loadStats();
+  await loadBumpLog();
   setInterval(loadStats, 30000);
+  setInterval(loadBumpLog, 60000);
 })();
 </script>
 </body>
