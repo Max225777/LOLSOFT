@@ -130,7 +130,6 @@ tr:hover td{background:#1e1e1e}
   <span class="sub">Market Auto-Bumper</span>
   <div id="ws-dot" title="WebSocket"></div>
   <div class="spacer"></div>
-  <button class="btn-s" onclick="refreshCache()">📦 Оновити кеш</button>
 </div>
 
 <div id="nav">
@@ -240,7 +239,6 @@ tr:hover td{background:#1e1e1e}
   <div class="card">
     <div class="row" style="gap:8px">
       <button class="btn btn-p" onclick="saveAll()">💾 Зберегти</button>
-      <button class="btn-s" onclick="refreshCache()">📦 Оновити кеш лотів</button>
       <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ Завантажити ZIP</button>
     </div>
     <div id="save-hint" style="font-size:11px;color:var(--sub);margin-top:8px"></div>
@@ -608,10 +606,6 @@ async function bumpNow(name) {
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
-async function refreshCache() {
-  await api('/api/refresh-cache', {method:'POST'});
-  toast('📦 Кеш оновлюється…');
-}
 
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 function connectWS() {

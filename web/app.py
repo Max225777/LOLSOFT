@@ -436,8 +436,10 @@ class SchedulerManager:
                 self._sched.add_job(engine.bump_tick, "interval", seconds=bi,
                                     id=f"bump_{name}", replace_existing=True)
 
-        # load items cache once on (re)start
+        # load items cache on start + every hour
         threading.Thread(target=self._warmup_cache, daemon=True).start()
+        self._sched.add_job(self._warmup_cache, "interval", hours=1,
+                            id="cache_refresh", replace_existing=True)
 
     def _warmup_cache(self):
         global _tag_items_cache, _tag_id_map
