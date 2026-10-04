@@ -4,7 +4,6 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>LOLSOFT</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#111;--bg2:#181818;--card:#1f1f1f;--border:#2e2e2e;
@@ -95,8 +94,11 @@ input.wide{min-width:260px;flex:1}
 .sched-labels{display:flex;gap:2px;flex-wrap:wrap}
 .sched-lbl{width:28px;text-align:center;font-size:9px;color:var(--sub)}
 
-/* bump timeline chart */
-.timeline-wrap{position:relative;height:160px}
+/* bump grid */
+.bump-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:28px}
+.bump-col-lbl{font-size:9px;color:var(--sub);margin-top:3px;text-align:center}
+.bump-cell{width:20px;height:8px;border-radius:2px;cursor:default;flex-shrink:0}
+.bump-cell:hover{opacity:.75}
 
 /* table */
 .tbl-wrap{overflow-x:auto}
@@ -152,8 +154,11 @@ tr:hover td{background:#1e1e1e}
   </div>
 
   <div class="card">
-    <div class="card-hd">Підняття по годинах — сьогодні 00:00–23:00 — зелений: успішне, червоний: невдале</div>
-    <div class="timeline-wrap"><canvas id="bump-chart"></canvas></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div class="card-hd" style="margin-bottom:0">Підняття сьогодні по годинах — кожна клітинка = одне підняття в реальному порядку</div>
+      <span style="font-size:11px;color:var(--sub)"><span style="color:var(--green)">■</span> успішне &nbsp;<span style="color:var(--red)">■</span> невдале</span>
+    </div>
+    <div id="bump-grid" style="display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:4px"></div>
   </div>
 
   <div class="card">
@@ -260,7 +265,6 @@ tr:hover td{background:#1e1e1e}
 <script>
 // ── globals ───────────────────────────────────────────────────────────────────
 let CFG = {};
-let chart = null;
 let logLines = [];
 let ws = null;
 let marketsLocal = []; // local copy for DOM manipulation
@@ -303,7 +307,7 @@ async function loadCfg() {
   return CFG;
 }
 
-// ── stats & chart ─────────────────────────────────────────────────────────────
+// ── stats ─────────────────────────────────────────────────────────────────────
 async function loadStats() {
   try {
     const s = await api('/api/stats');
@@ -311,57 +315,51 @@ async function loadStats() {
     document.getElementById('s-today').textContent = s.total_today;
     document.getElementById('s-ok').textContent    = s.ok_today;
     document.getElementById('s-fail').textContent  = s.fail_today;
-    renderChart(s.chart);
   } catch(e) { console.warn(e); }
 }
 
-function renderChart(data) {
-  const ctx = document.getElementById('bump-chart').getContext('2d');
-  if (chart) chart.destroy();
+// ── bump grid (chronological per-hour) ───────────────────────────────────────
+function renderBumpGrid(rows) {
+  const grid = document.getElementById('bump-grid');
+  if (!grid) return;
 
-  // fixed day: hours 0..23 of today
-  const todayPrefix = new Date().toISOString().slice(0,10); // "2025-10-04"
-  const hours = Array.from({length:24}, (_,h) =>
-    `${todayPrefix}T${String(h).padStart(2,'0')}:00`
-  );
+  // group by hour 0..23
   const byHour = {};
-  (data||[]).forEach(d => { byHour[d.hour] = d; });
-
-  const labels  = hours.map((_,h) => `${String(h).padStart(2,'0')}:00`);
-  const okData  = hours.map(h => byHour[h]?.ok   || 0);
-  const failData= hours.map(h => byHour[h]?.fail || 0);
-
-  chart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {label:'✅ Успішні', data:okData,   backgroundColor:'#4caf50cc', borderColor:'#4caf50', borderWidth:1, stack:'s'},
-        {label:'⛔ Невдалі', data:failData, backgroundColor:'#ff5252cc', borderColor:'#ff5252', borderWidth:1, stack:'s'},
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{labels:{color:'#aaa',font:{size:11},boxWidth:12}},
-        tooltip:{
-          callbacks:{
-            title: items => 'Година: '+items[0].label,
-            footer: items => {
-              const h = items[0].dataIndex;
-              const ok = okData[h], fail = failData[h], total = ok+fail;
-              return total ? `Всього: ${total} | Успішних: ${ok} | Невдалих: ${fail}` : 'Немає даних';
-            }
-          }
-        }
-      },
-      scales:{
-        x:{stacked:true, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}},
-        y:{stacked:true, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}, beginAtZero:true,
-           title:{display:true,text:'Кількість підняттів',color:'#555',font:{size:10}}},
-      }
-    }
+  for (let h = 0; h < 24; h++) byHour[h] = [];
+  rows.forEach(r => {
+    const h = parseInt((r.logged_at||'').slice(11,13)) || 0;
+    byHour[h].push(r);
   });
+
+  grid.innerHTML = '';
+  for (let h = 0; h < 24; h++) {
+    const items = byHour[h]; // already sorted oldest→newest from API
+    const col = document.createElement('div');
+    col.className = 'bump-col';
+
+    // cells top→bottom = chronological order
+    items.forEach(r => {
+      const cell = document.createElement('div');
+      cell.className = 'bump-cell';
+      cell.style.background = r.success ? '#4caf50' : '#ff5252';
+      const tip = `${r.logged_at.slice(11,19)} [${r.market_name||''}][${r.tag||''}]\n${r.item_title||r.item_id||''}\n${r.success?'✅ Успішно':'⛔ '+r.reason}`;
+      cell.title = tip;
+      col.appendChild(cell);
+    });
+
+    // empty hour — small placeholder dot
+    if (!items.length) {
+      const dot = document.createElement('div');
+      dot.style.cssText = 'width:20px;height:3px;background:var(--border);border-radius:2px';
+      col.appendChild(dot);
+    }
+
+    const lbl = document.createElement('div');
+    lbl.className = 'bump-col-lbl';
+    lbl.textContent = String(h).padStart(2,'0');
+    col.appendChild(lbl);
+    grid.appendChild(col);
+  }
 }
 
 // ── markets render ────────────────────────────────────────────────────────────
@@ -660,6 +658,7 @@ let bumpLogData = [];
 async function loadBumpLog() {
   try {
     bumpLogData = await api('/api/bump-log');
+    renderBumpGrid(bumpLogData.slice().reverse()); // oldest first for grid
     renderBumpLog();
   } catch(e) { console.warn(e); }
 }

@@ -522,7 +522,7 @@ def get_bump_log():
     rows = conn.execute(
         "SELECT market_name, tag, item_id, item_title, success, reason, logged_at"
         " FROM bumps WHERE logged_at >= date('now','localtime')"
-        " ORDER BY logged_at DESC LIMIT 200"
+        " ORDER BY logged_at DESC LIMIT 500"
     ).fetchall()
     conn.close()
     return [{"market_name":r[0],"tag":r[1],"item_id":r[2],"item_title":r[3],
