@@ -152,7 +152,7 @@ tr:hover td{background:#1e1e1e}
   </div>
 
   <div class="card">
-    <div class="card-hd">Підняття по годинах (48 год) — зелений: успішне, червоний: невдале</div>
+    <div class="card-hd">Підняття по годинах (24 год) — зелений: успішне, червоний: невдале</div>
     <div class="timeline-wrap"><canvas id="bump-chart"></canvas></div>
   </div>
 
@@ -304,10 +304,10 @@ function renderChart(data) {
   const ctx = document.getElementById('bump-chart').getContext('2d');
   if (chart) chart.destroy();
 
-  // fill gaps: last 48 hours
+  // fill gaps: last 24 hours
   const hours = [];
   const now = new Date();
-  for (let i = 47; i >= 0; i--) {
+  for (let i = 23; i >= 0; i--) {
     const d = new Date(now - i * 3600000);
     hours.push(d.toISOString().slice(0,13)+':00');
   }
