@@ -200,7 +200,7 @@ def stat_summary() -> dict:
     chart = conn.execute(
         "SELECT strftime('%Y-%m-%dT%H:00', logged_at) AS h,"
         " SUM(success), SUM(1-success) FROM bumps"
-        " WHERE logged_at >= datetime('now','-24 hours')"
+        " WHERE logged_at >= date('now','localtime')"
         " GROUP BY h ORDER BY h"
     ).fetchall()
     conn.close()

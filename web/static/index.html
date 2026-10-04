@@ -152,7 +152,7 @@ tr:hover td{background:#1e1e1e}
   </div>
 
   <div class="card">
-    <div class="card-hd">Підняття по годинах (24 год) — зелений: успішне, червоний: невдале</div>
+    <div class="card-hd">Підняття по годинах — сьогодні 00:00–23:00 — зелений: успішне, червоний: невдале</div>
     <div class="timeline-wrap"><canvas id="bump-chart"></canvas></div>
   </div>
 
@@ -304,17 +304,15 @@ function renderChart(data) {
   const ctx = document.getElementById('bump-chart').getContext('2d');
   if (chart) chart.destroy();
 
-  // fill gaps: last 24 hours
-  const hours = [];
-  const now = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const d = new Date(now - i * 3600000);
-    hours.push(d.toISOString().slice(0,13)+':00');
-  }
+  // fixed day: hours 0..23 of today
+  const todayPrefix = new Date().toISOString().slice(0,10); // "2025-10-04"
+  const hours = Array.from({length:24}, (_,h) =>
+    `${todayPrefix}T${String(h).padStart(2,'0')}:00`
+  );
   const byHour = {};
   (data||[]).forEach(d => { byHour[d.hour] = d; });
 
-  const labels  = hours.map(h => h.slice(11,16));
+  const labels  = hours.map((_,h) => `${String(h).padStart(2,'0')}:00`);
   const okData  = hours.map(h => byHour[h]?.ok   || 0);
   const failData= hours.map(h => byHour[h]?.fail || 0);
 
