@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  lolsoft:
+    build: .
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./lolsoft_config.json:/app/lolsoft_config.json
+      - ./lolsoft_stats.db:/app/lolsoft_stats.db

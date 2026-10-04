@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LOLSOFT</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#1a1a1a;--bg2:#202020;--card:#262626;--border:#333;
+  --accent:#a8c957;--accent-d:#8fae42;--text:#e6e6e6;--sub:#888;
+  --red:#ff8a8a;--yellow:#ffc857;--green:#a8c957;
+  --ok:#4caf50;--warn:#ffc857;--err:#ff5252;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;font-size:14px}
+a{color:var(--accent);text-decoration:none}
+
+/* layout */
+#app{display:flex;flex-direction:column;height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+header h1{font-size:18px;color:var(--accent);font-weight:700}
+header span{color:var(--sub);font-size:12px}
+.tabs{display:flex;gap:4px;padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.tab{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--sub);transition:.15s}
+.tab:hover{background:var(--border);color:var(--text)}
+.tab.active{background:var(--accent);color:#1a1a1a;font-weight:600}
+.pane{display:none;flex:1;overflow:auto;padding:16px}
+.pane.active{display:flex;flex-direction:column;gap:16px}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px}
+.card-title{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+
+/* form */
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+label{font-size:12px;color:var(--sub);white-space:nowrap}
+input,select{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;outline:none;transition:.15s}
+input:focus,select:focus{border-color:var(--accent)}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+input[type=number]{width:80px}
+input[type=time]{width:90px}
+input.wide{min-width:320px;flex:1}
+.btn{padding:7px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:.15s}
+.btn-primary{background:var(--accent);color:#1a1a1a}
+.btn-primary:hover{background:var(--accent-d)}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer}
+.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:#5c1c1c;color:var(--red);border:1px solid var(--red)}
+.btn-danger:hover{background:#7a2020}
+
+/* markets list */
+.market-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative}
+.market-card.disabled{opacity:.55}
+.market-card .mc-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.mc-name{font-weight:600;color:var(--text);flex:1}
+.badge{padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-on{background:#1e3b1e;color:var(--green)}
+.badge-off{background:#3b1e1e;color:var(--red)}
+.tags-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag-row{display:flex;align-items:center;gap:4px}
+.tag-row input{width:160px}
+
+/* log */
+#log-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;height:320px;overflow-y:auto;font-family:'Consolas',monospace;font-size:12px;line-height:1.6}
+.log-ok{color:#7ec850}.log-warn{color:var(--yellow)}.log-error{color:var(--red)}.log-info{color:var(--sub)}
+
+/* chart */
+.chart-wrap{position:relative;height:220px}
+
+/* stats cards */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.stat-val{font-size:28px;font-weight:700;color:var(--accent)}
+.stat-lbl{font-size:11px;color:var(--sub);margin-top:4px}
+
+/* table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--card);color:var(--accent);font-weight:600;padding:8px 10px;text-align:left;position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid var(--border)}
+tr:hover td{background:#222}
+.mine{color:var(--green)}
+.other{color:var(--red)}
+
+/* token input */
+.token-wrap{position:relative;flex:1}
+.token-wrap input{width:100%;padding-right:36px}
+.eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--sub);font-size:16px}
+
+/* scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#555}
+
+/* notification */
+#notif{position:fixed;bottom:16px;right:16px;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;display:none;z-index:999}
+.notif-ok{background:#1e3b1e;border:1px solid var(--green);color:var(--green)}
+.notif-err{background:#3b1e1e;border:1px solid var(--red);color:var(--red)}
+
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-left:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>LOLSOFT</h1>
+    <span>Market Auto-Bumper</span>
+    <div style="flex:1"></div>
+    <button class="btn-sm" onclick="downloadZip()">⬇ Завантажити ZIP</button>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dashboard')">📊 Дашборд</div>
+    <div class="tab" onclick="switchTab('markets')">🏪 Ринки</div>
+    <div class="tab" onclick="switchTab('settings')">⚙ Налаштування</div>
+    <div class="tab" onclick="switchTab('logs')">📋 Логи</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="pane-dashboard" class="pane active">
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Всього підняттів</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Сьогодні</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-ok" style="color:var(--ok)">—</div><div class="stat-lbl">Успішних сьогодні</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-fail" style="color:var(--err)">—</div><div class="stat-lbl">Невдалих сьогодні</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Успішні / Невдалі підняття (48 год)</div>
+      <div class="chart-wrap"><canvas id="bump-chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Останні логи</div>
+      <div id="log-box-dash"></div>
+    </div>
+  </div>
+
+  <!-- MARKETS -->
+  <div id="pane-markets" class="pane">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="addMarket()">+ Додати ринок</button>
+      <button class="btn-sm" onclick="loadListings()">🔄 Оновити таблицю</button>
+      <select id="mkt-select" style="min-width:180px" onchange="loadListings()"></select>
+    </div>
+    <div id="markets-list" style="display:flex;flex-direction:column;gap:12px"></div>
+    <div class="card" style="margin-top:4px">
+      <div class="card-title">Лоти ринку <span id="listings-mkt-name" style="color:var(--accent)"></span></div>
+      <div style="overflow-x:auto">
+        <table id="listings-table">
+          <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
+          <tbody id="listings-body"><tr><td colspan="6" style="color:var(--sub);text-align:center">Оберіть ринок і натисніть «Оновити таблицю»</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="pane-settings" class="pane">
+    <div class="card">
+      <div class="card-title">API Токен</div>
+      <div class="row">
+        <div class="token-wrap" style="max-width:500px">
+          <input type="password" id="inp-token" placeholder="Вставте Bearer токен з lzt.market/account/api"/>
+          <button class="eye-btn" onclick="toggleToken()">👁</button>
+        </div>
+        <a href="https://lzt.market/account/api" target="_blank" class="btn-sm">Де взяти?</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Автоматизація</div>
+      <div class="row" style="gap:20px">
+        <label><input type="checkbox" id="chk-autorefresh"/> Авто-оновлення таблиці</label>
+        <label><input type="checkbox" id="chk-autobump"/> Авто-підняття</label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Дії</div>
+      <div class="row">
+        <button class="btn btn-primary" onclick="saveSettings()">💾 Зберегти</button>
+        <button class="btn-sm" onclick="refreshCache()">📦 Оновити кеш лотів</button>
+      </div>
+      <div id="save-status" style="margin-top:8px;font-size:12px;color:var(--sub)"></div>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div id="pane-logs" class="pane">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="color:var(--sub);font-size:12px">Live-логи через WebSocket</span>
+      <span id="ws-status" style="font-size:11px;color:var(--sub)">●  відключено</span>
+      <button class="btn-sm" style="margin-left:auto" onclick="clearLog()">Очистити</button>
+    </div>
+    <div id="log-box"></div>
+  </div>
+</div>
+
+<div id="notif"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let cfg = {};
+let bumpChart = null;
+let ws = null;
+let logLines = [];
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const panes = ['dashboard','markets','settings','logs'];
+    t.classList.toggle('active', panes[i]===name);
+  });
+  document.querySelectorAll('.pane').forEach(p => {
+    p.classList.toggle('active', p.id === 'pane-'+name);
+  });
+  if (name==='dashboard') loadStats();
+  if (name==='markets') renderMarkets();
+  if (name==='settings') loadSettingsForm();
+  if (name==='logs') {} // ws already running
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function apiFetch(url, opts={}) {
+  const r = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Notify ───────────────────────────────────────────────────────────────────
+function notify(msg, ok=true) {
+  const n = document.getElementById('notif');
+  n.textContent = msg;
+  n.className = ok ? 'notif-ok' : 'notif-err';
+  n.style.display = 'block';
+  setTimeout(()=>n.style.display='none', 3000);
+}
+
+// ── Stats & Chart ─────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const s = await apiFetch('/api/stats');
+    document.getElementById('s-total').textContent = s.total_all;
+    document.getElementById('s-today').textContent = s.total_today;
+    document.getElementById('s-ok').textContent = s.ok_today;
+    document.getElementById('s-fail').textContent = s.fail_today;
+    renderChart(s.chart);
+  } catch(e){ console.warn(e); }
+}
+
+function renderChart(data) {
+  const labels = data.map(d => d.hour ? d.hour.slice(11,16) : '');
+  const okData   = data.map(d => d.ok);
+  const failData = data.map(d => d.fail);
+  const ctx = document.getElementById('bump-chart').getContext('2d');
+  if (bumpChart) bumpChart.destroy();
+  bumpChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {label:'Успішні', data:okData, backgroundColor:'#4caf5088', borderColor:'#4caf50', borderWidth:1},
+        {label:'Невдалі', data:failData, backgroundColor:'#ff525288', borderColor:'#ff5252', borderWidth:1},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#e6e6e6',font:{size:12}}}},
+      scales:{
+        x:{ticks:{color:'#888',maxTicksLimit:12},grid:{color:'#333'}},
+        y:{ticks:{color:'#888'},grid:{color:'#333'},beginAtZero:true},
+      }
+    }
+  });
+}
+
+// ── Config load ───────────────────────────────────────────────────────────────
+async function loadCfg() {
+  cfg = await apiFetch('/api/config');
+  return cfg;
+}
+
+async function loadSettingsForm() {
+  await loadCfg();
+  document.getElementById('inp-token').value = cfg._token_set ? '(токен збережено, введіть новий щоб змінити)' : '';
+  document.getElementById('chk-autorefresh').checked = !!cfg.autorefresh;
+  document.getElementById('chk-autobump').checked    = !!cfg.autobump;
+}
+
+function toggleToken() {
+  const inp = document.getElementById('inp-token');
+  inp.type = inp.type==='password' ? 'text' : 'password';
+}
+
+async function saveSettings() {
+  const tokenVal = document.getElementById('inp-token').value.trim();
+  const patch = {
+    ...cfg,
+    autorefresh: document.getElementById('chk-autorefresh').checked,
+    autobump:    document.getElementById('chk-autobump').checked,
+  };
+  // only update token if user typed something meaningful
+  if (tokenVal && !tokenVal.startsWith('(')) {
+    patch.token = tokenVal;
+  }
+  // collect market data from DOM
+  patch.markets = collectMarketsFromDOM();
+  try {
+    await apiFetch('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
+    notify('✅ Збережено');
+    document.getElementById('save-status').textContent = 'Збережено: '+new Date().toLocaleTimeString();
+    await loadCfg();
+  } catch(e){ notify('⛔ '+e.message, false); }
+}
+
+async function refreshCache() {
+  await apiFetch('/api/refresh-cache', {method:'POST'});
+  notify('📦 Кеш оновлюється…');
+}
+
+// ── Markets render ────────────────────────────────────────────────────────────
+async function renderMarkets() {
+  await loadCfg();
+  const container = document.getElementById('markets-list');
+  container.innerHTML = '';
+  const sel = document.getElementById('mkt-select');
+  sel.innerHTML = '';
+
+  (cfg.markets || []).forEach((mkt, idx) => {
+    const card = buildMarketCard(mkt, idx);
+    container.appendChild(card);
+
+    const opt = document.createElement('option');
+    opt.value = mkt.name; opt.textContent = mkt.name;
+    sel.appendChild(opt);
+  });
+}
+
+function buildMarketCard(mkt, idx) {
+  const div = document.createElement('div');
+  div.className = 'market-card' + (mkt.enabled===false ? ' disabled' : '');
+  div.dataset.idx = idx;
+
+  div.innerHTML = `
+    <div class="mc-head">
+      <input class="mc-name" value="${esc(mkt.name)}" placeholder="Назва ринку" style="background:transparent;border:none;font-size:15px;font-weight:600;color:var(--text);flex:1"/>
+      <span class="badge ${mkt.enabled!==false?'badge-on':'badge-off'}">${mkt.enabled!==false?'Активний':'Вимкнено'}</span>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" class="mkt-enabled" ${mkt.enabled!==false?'checked':''} onchange="toggleEnabled(this)"/> Вкл
+      </label>
+      <button class="btn-sm btn-danger" onclick="removeMarket(${idx})">✕</button>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <label>URL:</label>
+      <input class="wide mkt-url" value="${esc(mkt.url||'')}" placeholder="https://lzt.market/telegram/?..."/>
+    </div>
+    <div class="row">
+      <label>Лотів у таблиці:</label>
+      <input type="number" class="mkt-count" value="${mkt.count||10}" min="1" max="50"/>
+      <label>Топ-N:</label>
+      <input type="number" class="mkt-topn" value="${mkt.top_n||1}" min="1" max="20"/>
+      <label>Інтервал оновлення (с):</label>
+      <input type="number" class="mkt-refresh" value="${mkt.refresh_interval||60}" min="30" max="3600"/>
+      <label>Інтервал підняття (с):</label>
+      <input type="number" class="mkt-bump" value="${mkt.bump_interval||60}" min="30" max="3600"/>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label>Робочі години:</label>
+      <input type="time" class="mkt-from" value="${mkt.work_from||''}" placeholder="09:00"/>
+      <span style="color:var(--sub)">—</span>
+      <input type="time" class="mkt-to" value="${mkt.work_to||''}" placeholder="23:00"/>
+      <span style="font-size:11px;color:var(--sub)">(порожньо = цілодобово)</span>
+    </div>
+    <div class="card-title" style="margin-top:10px">Теги для підняття</div>
+    <div class="tags-grid mkt-tags">
+      ${(mkt.tags||[]).map((t,ti)=>`
+        <div class="tag-row">
+          <input class="tag-name" value="${esc(t.tag||'')}" placeholder="Назва тегу"/>
+          <input type="number" class="tag-count" value="${t.count||1}" min="1" max="50" style="width:55px"/>
+          <button class="btn-sm" onclick="removeTag(this)">✕</button>
+        </div>`).join('')}
+    </div>
+    <div class="row" style="margin-top:8px;gap:6px">
+      <button class="btn-sm" onclick="addTag(this)">+ Тег</button>
+      <button class="btn-sm" onclick="bumpNow('${esc(mkt.name)}')">⚡ Підняти зараз</button>
+    </div>
+  `;
+  return div;
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+
+function toggleEnabled(chk) {
+  const card = chk.closest('.market-card');
+  const badge = card.querySelector('.badge');
+  const on = chk.checked;
+  card.classList.toggle('disabled', !on);
+  badge.className = 'badge ' + (on ? 'badge-on' : 'badge-off');
+  badge.textContent = on ? 'Активний' : 'Вимкнено';
+}
+
+function addTag(btn) {
+  const grid = btn.closest('.market-card').querySelector('.mkt-tags');
+  const div = document.createElement('div');
+  div.className = 'tag-row';
+  div.innerHTML = `<input class="tag-name" placeholder="Назва тегу"/>
+    <input type="number" class="tag-count" value="1" min="1" max="50" style="width:55px"/>
+    <button class="btn-sm" onclick="removeTag(this)">✕</button>`;
+  grid.appendChild(div);
+}
+
+function removeTag(btn) { btn.closest('.tag-row').remove(); }
+
+function addMarket() {
+  if (!cfg.markets) cfg.markets = [];
+  cfg.markets.push({name:'Новий ринок',url:'',tags:[],count:10,top_n:1,
+    refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:''});
+  renderMarkets();
+}
+
+async function removeMarket(idx) {
+  if (!confirm('Видалити цей ринок?')) return;
+  cfg.markets.splice(idx, 1);
+  await apiFetch('/api/config', {method:'POST', body:JSON.stringify({data:cfg})});
+  await loadCfg();
+  renderMarkets();
+}
+
+function collectMarketsFromDOM() {
+  const cards = document.querySelectorAll('.market-card');
+  return Array.from(cards).map(card => {
+    const tags = Array.from(card.querySelectorAll('.tag-row')).map(row => ({
+      tag:   row.querySelector('.tag-name').value.trim(),
+      count: parseInt(row.querySelector('.tag-count').value)||1,
+    })).filter(t=>t.tag);
+    return {
+      name:             card.querySelector('.mc-name').value.trim(),
+      url:              card.querySelector('.mkt-url').value.trim(),
+      count:            parseInt(card.querySelector('.mkt-count').value)||10,
+      top_n:            parseInt(card.querySelector('.mkt-topn').value)||1,
+      refresh_interval: parseInt(card.querySelector('.mkt-refresh').value)||60,
+      bump_interval:    parseInt(card.querySelector('.mkt-bump').value)||60,
+      work_from:        card.querySelector('.mkt-from').value,
+      work_to:          card.querySelector('.mkt-to').value,
+      enabled:          card.querySelector('.mkt-enabled').checked,
+      tags,
+    };
+  });
+}
+
+// ── Listings table ─────────────────────────────────────────────────────────────
+async function loadListings() {
+  const mktName = document.getElementById('mkt-select').value;
+  if (!mktName) return;
+  document.getElementById('listings-mkt-name').textContent = mktName;
+  const tbody = document.getElementById('listings-body');
+  tbody.innerHTML = '<tr><td colspan="6" style="color:var(--sub)">Завантаження…</td></tr>';
+  try {
+    const data = await apiFetch('/api/market-listings/'+encodeURIComponent(mktName));
+    tbody.innerHTML = '';
+    data.forEach((lot,i) => {
+      const cls = lot.is_mine ? 'mine' : 'other';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td><a href="${lot.link}" target="_blank" class="${cls}">${esc(lot.title)}</a></td>
+        <td class="${cls}">${esc(lot.seller)}</td>
+        <td>${esc(lot.price)}</td>
+        <td style="color:var(--sub);font-size:11px">${lot.bumped_at?'✅ '+lot.bumped_at:''}</td>
+        <td>${lot.is_mine?'✓':''}</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch(e){
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Помилка: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Bump now ─────────────────────────────────────────────────────────────────
+async function bumpNow(name) {
+  try {
+    await apiFetch('/api/bump-now/'+encodeURIComponent(name), {method:'POST'});
+    notify('⚡ Підняття запущено для «'+name+'»');
+  } catch(e){ notify('⛔ '+e.message, false); }
+}
+
+// ── WebSocket logs ────────────────────────────────────────────────────────────
+function connectWs() {
+  const proto = location.protocol==='https:'?'wss':'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/logs`);
+  const statusEl = document.getElementById('ws-status');
+
+  ws.onopen = () => { statusEl.style.color='var(--green)'; statusEl.textContent='●  підключено'; };
+  ws.onclose= () => { statusEl.style.color='var(--sub)';   statusEl.textContent='●  відключено'; setTimeout(connectWs,3000); };
+  ws.onerror= () => ws.close();
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    appendLog(msg);
+  };
+}
+
+function appendLog(msg) {
+  logLines.push(msg);
+  if (logLines.length > 200) logLines = logLines.slice(-200);
+  renderLogBox('log-box', logLines);
+  renderLogBox('log-box-dash', logLines.slice(-20));
+}
+
+function renderLogBox(id, lines) {
+  const box = document.getElementById(id);
+  if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 40;
+  box.innerHTML = lines.map(m =>
+    `<div class="log-${m.level||'info'}"><span style="color:var(--sub)">${m.time} </span>${esc(m.text)}</div>`
+  ).join('');
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() { logLines=[]; renderLogBox('log-box',[]); }
+
+// ── ZIP download ──────────────────────────────────────────────────────────────
+function downloadZip() {
+  window.location.href = '/api/download-zip';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  connectWs();
+  await loadStats();
+  // auto-refresh stats every 30s
+  setInterval(loadStats, 30000);
+  // load config quietly
+  await loadCfg();
+})();
+</script>
+</body>
+</html>
