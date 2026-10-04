@@ -130,6 +130,7 @@ def fetch_all_my_items(token: str) -> list[dict]:
     return result
 
 _tag_items_cache: dict[str, list[dict]] = {}
+_cache_loaded_at: str = ""
 
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
@@ -463,6 +464,7 @@ class SchedulerManager:
                     elif isinstance(t, int) and t in id_to_name:
                         cache[id_to_name[t]].append(it)
             _tag_items_cache = cache
+            _cache_loaded_at = datetime.now().strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(f"📦 Кеш готовий: {len(all_items)} лотів, {total} по тегах", "ok")
         except Exception as e:
@@ -513,6 +515,18 @@ def set_config(body: ConfigIn):
 @app.get("/api/stats")
 def get_stats():
     return stat_summary()
+
+@app.get("/api/cache-status")
+def cache_status():
+    tags = [
+        {"tag": tag, "count": len(items)}
+        for tag, items in _tag_items_cache.items()
+    ]
+    return {
+        "loaded_at": _cache_loaded_at,
+        "total_items": sum(t["count"] for t in tags),
+        "tags": tags,
+    }
 
 @app.get("/api/logs")
 def get_logs():
