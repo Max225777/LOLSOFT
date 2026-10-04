@@ -206,7 +206,16 @@ def stat_summary() -> dict:
     conn.close()
     return dict(total_all=total_all, total_today=total_today,
                 ok_today=ok_today, fail_today=fail_today,
-                chart=[{"hour": r[0], "ok": r[1], "fail": r[2]} for r in chart])
+                chart=[{"hour": r[0], "ok": r[1] or 0, "fail": r[2] or 0} for r in chart])
+
+
+def default_market(name="Новий ринок") -> dict:
+    return {
+        "name": name, "url": "", "tags": [],
+        "count": 10, "top_n": 1,
+        "refresh_interval": 60, "bump_interval": 60,
+        "enabled": True, "work_from": "", "work_to": "",
+    }
 
 # ─── WebSocket log broadcaster ────────────────────────────────────────────────
 

@@ -7,529 +7,636 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#1a1a1a;--bg2:#202020;--card:#262626;--border:#333;
-  --accent:#a8c957;--accent-d:#8fae42;--text:#e6e6e6;--sub:#888;
-  --red:#ff8a8a;--yellow:#ffc857;--green:#a8c957;
-  --ok:#4caf50;--warn:#ffc857;--err:#ff5252;
+  --bg:#111;--bg2:#181818;--card:#1f1f1f;--border:#2e2e2e;
+  --accent:#a8c957;--accent-d:#8fae42;--text:#e2e2e2;--sub:#666;
+  --red:#ff5252;--yellow:#ffc857;--green:#4caf50;--blue:#4fc3f7;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;font-size:14px}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
 
-/* layout */
-#app{display:flex;flex-direction:column;height:100vh}
-header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--border)}
-header h1{font-size:18px;color:var(--accent);font-weight:700}
-header span{color:var(--sub);font-size:12px}
-.tabs{display:flex;gap:4px;padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border)}
-.tab{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--sub);transition:.15s}
+/* top bar */
+#topbar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+#topbar h1{font-size:16px;color:var(--accent);font-weight:700;letter-spacing:1px}
+#topbar .sub{color:var(--sub);font-size:11px}
+#ws-dot{width:7px;height:7px;border-radius:50%;background:var(--sub);transition:.3s;margin-left:4px}
+#ws-dot.on{background:var(--green)}
+.spacer{flex:1}
+
+/* nav tabs */
+#nav{display:flex;gap:2px;padding:6px 10px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:5px 14px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--sub);font-weight:500;transition:.12s;user-select:none}
 .tab:hover{background:var(--border);color:var(--text)}
-.tab.active{background:var(--accent);color:#1a1a1a;font-weight:600}
-.pane{display:none;flex:1;overflow:auto;padding:16px}
-.pane.active{display:flex;flex-direction:column;gap:16px}
+.tab.active{background:var(--accent);color:#111;font-weight:700}
+
+/* panes */
+#content{flex:1;overflow:hidden;position:relative}
+.pane{display:none;position:absolute;inset:0;overflow-y:auto;padding:14px;gap:14px;flex-direction:column}
+.pane.active{display:flex}
 
 /* cards */
-.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px}
-.card-title{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:14px}
+.card-hd{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;font-weight:600}
 
-/* form */
+/* grid helpers */
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:10px}
 label{font-size:12px;color:var(--sub);white-space:nowrap}
-input,select{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;outline:none;transition:.15s}
-input:focus,select:focus{border-color:var(--accent)}
-input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
-input[type=number]{width:80px}
-input[type=time]{width:90px}
-input.wide{min-width:320px;flex:1}
-.btn{padding:7px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:.15s}
-.btn-primary{background:var(--accent);color:#1a1a1a}
-.btn-primary:hover{background:var(--accent-d)}
-.btn-sm{padding:4px 10px;font-size:12px;border-radius:5px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer}
-.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
-.btn-danger{background:#5c1c1c;color:var(--red);border:1px solid var(--red)}
-.btn-danger:hover{background:#7a2020}
 
-/* markets list */
-.market-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative}
-.market-card.disabled{opacity:.55}
-.market-card .mc-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.mc-name{font-weight:600;color:var(--text);flex:1}
-.badge{padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
-.badge-on{background:#1e3b1e;color:var(--green)}
-.badge-off{background:#3b1e1e;color:var(--red)}
+/* inputs */
+input,select,textarea{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 9px;font-size:12px;outline:none;transition:.12s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+input[type=number]{width:72px}
+input[type=time]{width:84px}
+input.wide{min-width:260px;flex:1}
+
+/* buttons */
+.btn{padding:6px 14px;border-radius:5px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.12s;font-family:inherit}
+.btn-p{background:var(--accent);color:#111}
+.btn-p:hover{background:var(--accent-d)}
+.btn-s{padding:3px 9px;font-size:11px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer;font-family:inherit}
+.btn-s:hover{border-color:var(--accent);color:var(--accent)}
+.btn-d{background:#3a1212;color:var(--red);border:1px solid #5c2020}
+.btn-d:hover{background:#501616}
+
+/* stat tiles */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.stat-tile{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px;text-align:center}
+.stat-val{font-size:26px;font-weight:700}
+.stat-lbl{font-size:10px;color:var(--sub);margin-top:3px;text-transform:uppercase;letter-spacing:.4px}
+
+/* log box */
+.logbox{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;line-height:1.65;overflow-y:auto}
+.l-ok{color:#6dbf6d}.l-warn{color:var(--yellow)}.l-error{color:var(--red)}.l-info{color:#555}
+.l-ts{color:#3a3a3a}
+
+/* market cards */
+.mkt-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:12px}
+.mkt-card.off{opacity:.5}
+.mkt-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.mkt-name-inp{background:transparent;border:none;font-size:14px;font-weight:700;color:var(--text);flex:1;padding:0;outline:none}
+.mkt-name-inp:focus{color:var(--accent)}
+.badge{padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.b-on{background:#1c3a1c;color:#6dbf6d}
+.b-off{background:#3a1c1c;color:#ff7070}
 .tags-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tag-row{display:flex;align-items:center;gap:4px}
-.tag-row input{width:160px}
+.tag-row input.tname{width:150px}
+.tag-row input.tcnt{width:48px}
 
-/* log */
-#log-box{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;height:320px;overflow-y:auto;font-family:'Consolas',monospace;font-size:12px;line-height:1.6}
-.log-ok{color:#7ec850}.log-warn{color:var(--yellow)}.log-error{color:var(--red)}.log-info{color:var(--sub)}
+/* 24h schedule grid */
+.sched-grid{display:flex;gap:2px;align-items:flex-end;margin-top:6px;flex-wrap:wrap}
+.sched-cell{width:28px;border-radius:3px 3px 0 0;min-height:6px;cursor:default;position:relative}
+.sched-cell:hover .sched-tip{display:block}
+.sched-tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;margin-bottom:3px;z-index:10}
+.sched-labels{display:flex;gap:2px;flex-wrap:wrap}
+.sched-lbl{width:28px;text-align:center;font-size:9px;color:var(--sub)}
 
-/* chart */
-.chart-wrap{position:relative;height:220px}
-
-/* stats cards */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
-.stat-val{font-size:28px;font-weight:700;color:var(--accent)}
-.stat-lbl{font-size:11px;color:var(--sub);margin-top:4px}
+/* bump timeline chart */
+.timeline-wrap{position:relative;height:160px}
 
 /* table */
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{background:var(--card);color:var(--accent);font-weight:600;padding:8px 10px;text-align:left;position:sticky;top:0}
-td{padding:7px 10px;border-bottom:1px solid var(--border)}
-tr:hover td{background:#222}
-.mine{color:var(--green)}
-.other{color:var(--red)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--bg2);color:var(--accent);font-size:11px;font-weight:600;padding:7px 10px;text-align:left;position:sticky;top:0;border-bottom:1px solid var(--border)}
+td{padding:6px 10px;border-bottom:1px solid #1e1e1e}
+tr:hover td{background:#1e1e1e}
+.mine{color:var(--accent)}.other{color:#888}
 
-/* token input */
-.token-wrap{position:relative;flex:1}
-.token-wrap input{width:100%;padding-right:36px}
-.eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--sub);font-size:16px}
+/* token wrap */
+.tok-wrap{position:relative;flex:1;max-width:460px}
+.tok-wrap input{width:100%;padding-right:32px}
+.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--sub);font-size:14px;padding:0}
+
+/* toast */
+#toast{position:fixed;bottom:14px;right:14px;padding:9px 15px;border-radius:6px;font-size:12px;font-weight:600;display:none;z-index:9999;pointer-events:none}
+.t-ok{background:#1a3a1a;border:1px solid var(--green);color:#6dbf6d}
+.t-err{background:#3a1a1a;border:1px solid var(--red);color:#ff7070}
 
 /* scrollbar */
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:#555}
-
-/* notification */
-#notif{position:fixed;bottom:16px;right:16px;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;display:none;z-index:999}
-.notif-ok{background:#1e3b1e;border:1px solid var(--green);color:var(--green)}
-.notif-err{background:#3b1e1e;border:1px solid var(--red);color:var(--red)}
-
-.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-left:6px}
-@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div id="app">
-  <header>
-    <h1>LOLSOFT</h1>
-    <span>Market Auto-Bumper</span>
-    <div style="flex:1"></div>
-    <button class="btn-sm" onclick="downloadZip()">⬇ Завантажити ZIP</button>
-  </header>
+<div id="topbar">
+  <h1>LOLSOFT</h1>
+  <span class="sub">Market Auto-Bumper</span>
+  <div id="ws-dot" title="WebSocket"></div>
+  <div class="spacer"></div>
+  <button class="btn-s" onclick="refreshCache()">📦 Оновити кеш</button>
+  <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ ZIP</button>
+</div>
 
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('dashboard')">📊 Дашборд</div>
-    <div class="tab" onclick="switchTab('markets')">🏪 Ринки</div>
-    <div class="tab" onclick="switchTab('settings')">⚙ Налаштування</div>
-    <div class="tab" onclick="switchTab('logs')">📋 Логи</div>
+<div id="nav">
+  <div class="tab active" data-tab="dash">📊 Дашборд</div>
+  <div class="tab" data-tab="markets">🏪 Ринки</div>
+  <div class="tab" data-tab="schedule">🕐 Розклад</div>
+  <div class="tab" data-tab="settings">⚙ Налаштування</div>
+  <div class="tab" data-tab="logs">📋 Логи</div>
+</div>
+
+<div id="content">
+
+<!-- ── DASHBOARD ─────────────────────────────────────────────────────────── -->
+<div class="pane active" id="pane-dash">
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-tile"><div class="stat-val" id="s-all">—</div><div class="stat-lbl">Всього спроб</div></div>
+    <div class="stat-tile"><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Сьогодні</div></div>
+    <div class="stat-tile"><div class="stat-val" id="s-ok" style="color:var(--green)">—</div><div class="stat-lbl">✅ Успішних</div></div>
+    <div class="stat-tile"><div class="stat-val" id="s-fail" style="color:var(--red)">—</div><div class="stat-lbl">⛔ Невдалих</div></div>
   </div>
 
-  <!-- DASHBOARD -->
-  <div id="pane-dashboard" class="pane active">
-    <div class="stat-grid" id="stat-grid">
-      <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Всього підняттів</div></div>
-      <div class="stat-card"><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Сьогодні</div></div>
-      <div class="stat-card"><div class="stat-val" id="s-ok" style="color:var(--ok)">—</div><div class="stat-lbl">Успішних сьогодні</div></div>
-      <div class="stat-card"><div class="stat-val" id="s-fail" style="color:var(--err)">—</div><div class="stat-lbl">Невдалих сьогодні</div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Успішні / Невдалі підняття (48 год)</div>
-      <div class="chart-wrap"><canvas id="bump-chart"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Останні логи</div>
-      <div id="log-box-dash"></div>
-    </div>
+  <div class="card">
+    <div class="card-hd">Підняття по годинах (48 год) — зелений: успішне, червоний: невдале</div>
+    <div class="timeline-wrap"><canvas id="bump-chart"></canvas></div>
   </div>
 
-  <!-- MARKETS -->
-  <div id="pane-markets" class="pane">
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-primary" onclick="addMarket()">+ Додати ринок</button>
-      <button class="btn-sm" onclick="loadListings()">🔄 Оновити таблицю</button>
-      <select id="mkt-select" style="min-width:180px" onchange="loadListings()"></select>
-    </div>
-    <div id="markets-list" style="display:flex;flex-direction:column;gap:12px"></div>
-    <div class="card" style="margin-top:4px">
-      <div class="card-title">Лоти ринку <span id="listings-mkt-name" style="color:var(--accent)"></span></div>
-      <div style="overflow-x:auto">
-        <table id="listings-table">
-          <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
-          <tbody id="listings-body"><tr><td colspan="6" style="color:var(--sub);text-align:center">Оберіть ринок і натисніть «Оновити таблицю»</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- SETTINGS -->
-  <div id="pane-settings" class="pane">
-    <div class="card">
-      <div class="card-title">API Токен</div>
-      <div class="row">
-        <div class="token-wrap" style="max-width:500px">
-          <input type="password" id="inp-token" placeholder="Вставте Bearer токен з lzt.market/account/api"/>
-          <button class="eye-btn" onclick="toggleToken()">👁</button>
-        </div>
-        <a href="https://lzt.market/account/api" target="_blank" class="btn-sm">Де взяти?</a>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Автоматизація</div>
-      <div class="row" style="gap:20px">
-        <label><input type="checkbox" id="chk-autorefresh"/> Авто-оновлення таблиці</label>
-        <label><input type="checkbox" id="chk-autobump"/> Авто-підняття</label>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Дії</div>
-      <div class="row">
-        <button class="btn btn-primary" onclick="saveSettings()">💾 Зберегти</button>
-        <button class="btn-sm" onclick="refreshCache()">📦 Оновити кеш лотів</button>
-      </div>
-      <div id="save-status" style="margin-top:8px;font-size:12px;color:var(--sub)"></div>
-    </div>
-  </div>
-
-  <!-- LOGS -->
-  <div id="pane-logs" class="pane">
-    <div style="display:flex;gap:8px;align-items:center">
-      <span style="color:var(--sub);font-size:12px">Live-логи через WebSocket</span>
-      <span id="ws-status" style="font-size:11px;color:var(--sub)">●  відключено</span>
-      <button class="btn-sm" style="margin-left:auto" onclick="clearLog()">Очистити</button>
-    </div>
-    <div id="log-box"></div>
+  <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
+    <div class="card-hd" style="margin-bottom:6px">Останні події</div>
+    <div class="logbox" id="log-dash" style="flex:1;min-height:120px;max-height:240px"></div>
   </div>
 </div>
 
-<div id="notif"></div>
+<!-- ── MARKETS ────────────────────────────────────────────────────────────── -->
+<div class="pane" id="pane-markets">
+  <div class="row">
+    <button class="btn btn-p" onclick="addMarket()">+ Додати ринок</button>
+    <button class="btn-s" onclick="saveAll()">💾 Зберегти все</button>
+    <div class="spacer"></div>
+    <select id="mkt-sel" style="min-width:160px" onchange="loadListings()"></select>
+    <button class="btn-s" onclick="loadListings()">🔄 Таблиця</button>
+  </div>
+
+  <div id="markets-list" class="col"></div>
+
+  <div class="card">
+    <div class="card-hd">Лоти: <span id="lst-name" style="color:var(--accent)"></span></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
+        <tbody id="lst-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:20px">Оберіть ринок →</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCHEDULE ───────────────────────────────────────────────────────────── -->
+<div class="pane" id="pane-schedule">
+  <div class="card">
+    <div class="card-hd">Розклад роботи по ринках — 24 год. Зелений = активний час, темний = вимкнено</div>
+    <div id="sched-container" class="col" style="gap:14px;margin-top:4px"></div>
+  </div>
+</div>
+
+<!-- ── SETTINGS ───────────────────────────────────────────────────────────── -->
+<div class="pane" id="pane-settings">
+  <div class="card">
+    <div class="card-hd">API Токен</div>
+    <div class="row">
+      <div class="tok-wrap">
+        <input type="password" id="inp-token" placeholder="Bearer токен з lzt.market/account/api"/>
+        <button class="eye" onclick="toggleTok()">👁</button>
+      </div>
+      <a href="https://lzt.market/account/api" target="_blank" class="btn-s">Де взяти?</a>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px" id="tok-hint"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Автоматизація</div>
+    <div class="row" style="gap:20px">
+      <label><input type="checkbox" id="chk-ar"/> Авто-оновлення таблиці</label>
+      <label><input type="checkbox" id="chk-ab"/> Авто-підняття</label>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">
+      Після збереження сервер запускає планувальник — твій ПК не потрібен.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="gap:8px">
+      <button class="btn btn-p" onclick="saveAll()">💾 Зберегти</button>
+      <button class="btn-s" onclick="refreshCache()">📦 Оновити кеш лотів</button>
+      <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ Завантажити ZIP</button>
+    </div>
+    <div id="save-hint" style="font-size:11px;color:var(--sub);margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- ── LOGS ───────────────────────────────────────────────────────────────── -->
+<div class="pane" id="pane-logs">
+  <div class="row">
+    <span style="font-size:11px;color:var(--sub)">Live WebSocket</span>
+    <div id="ws-dot2" style="width:7px;height:7px;border-radius:50%;background:var(--sub);transition:.3s"></div>
+    <div class="spacer"></div>
+    <button class="btn-s" onclick="clearLogs()">Очистити</button>
+  </div>
+  <div class="logbox" id="log-full" style="flex:1;min-height:0;height:calc(100vh - 160px)"></div>
+</div>
+
+</div><!-- /content -->
+<div id="toast"></div>
 
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
-let cfg = {};
-let bumpChart = null;
-let ws = null;
+// ── globals ───────────────────────────────────────────────────────────────────
+let CFG = {};
+let chart = null;
 let logLines = [];
+let ws = null;
+let marketsLocal = []; // local copy for DOM manipulation
 
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => {
-    const panes = ['dashboard','markets','settings','logs'];
-    t.classList.toggle('active', panes[i]===name);
+// ── tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('pane-'+t.dataset.tab).classList.add('active');
+    if (t.dataset.tab==='dash')     loadStats();
+    if (t.dataset.tab==='markets')  renderMarkets();
+    if (t.dataset.tab==='schedule') renderSchedule();
+    if (t.dataset.tab==='settings') populateSettings();
   });
-  document.querySelectorAll('.pane').forEach(p => {
-    p.classList.toggle('active', p.id === 'pane-'+name);
-  });
-  if (name==='dashboard') loadStats();
-  if (name==='markets') renderMarkets();
-  if (name==='settings') loadSettingsForm();
-  if (name==='logs') {} // ws already running
-}
+});
 
-// ── API ──────────────────────────────────────────────────────────────────────
-async function apiFetch(url, opts={}) {
+// ── api ───────────────────────────────────────────────────────────────────────
+async function api(url, opts={}) {
   const r = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) { const t = await r.text(); throw new Error(t.slice(0,120)); }
   return r.json();
 }
 
-// ── Notify ───────────────────────────────────────────────────────────────────
-function notify(msg, ok=true) {
-  const n = document.getElementById('notif');
-  n.textContent = msg;
-  n.className = ok ? 'notif-ok' : 'notif-err';
-  n.style.display = 'block';
-  setTimeout(()=>n.style.display='none', 3000);
+// ── toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = ok ? 't-ok' : 't-err';
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.style.display='none', 3000);
 }
 
-// ── Stats & Chart ─────────────────────────────────────────────────────────────
+// ── load config ───────────────────────────────────────────────────────────────
+async function loadCfg() {
+  CFG = await api('/api/config');
+  marketsLocal = JSON.parse(JSON.stringify(CFG.markets || []));
+  return CFG;
+}
+
+// ── stats & chart ─────────────────────────────────────────────────────────────
 async function loadStats() {
   try {
-    const s = await apiFetch('/api/stats');
-    document.getElementById('s-total').textContent = s.total_all;
+    const s = await api('/api/stats');
+    document.getElementById('s-all').textContent   = s.total_all;
     document.getElementById('s-today').textContent = s.total_today;
-    document.getElementById('s-ok').textContent = s.ok_today;
-    document.getElementById('s-fail').textContent = s.fail_today;
+    document.getElementById('s-ok').textContent    = s.ok_today;
+    document.getElementById('s-fail').textContent  = s.fail_today;
     renderChart(s.chart);
-  } catch(e){ console.warn(e); }
+  } catch(e) { console.warn(e); }
 }
 
 function renderChart(data) {
-  const labels = data.map(d => d.hour ? d.hour.slice(11,16) : '');
-  const okData   = data.map(d => d.ok);
-  const failData = data.map(d => d.fail);
   const ctx = document.getElementById('bump-chart').getContext('2d');
-  if (bumpChart) bumpChart.destroy();
-  bumpChart = new Chart(ctx, {
+  if (chart) chart.destroy();
+
+  // fill gaps: last 48 hours
+  const hours = [];
+  const now = new Date();
+  for (let i = 47; i >= 0; i--) {
+    const d = new Date(now - i * 3600000);
+    hours.push(d.toISOString().slice(0,13)+':00');
+  }
+  const byHour = {};
+  (data||[]).forEach(d => { byHour[d.hour] = d; });
+
+  const labels  = hours.map(h => h.slice(11,16));
+  const okData  = hours.map(h => byHour[h]?.ok   || 0);
+  const failData= hours.map(h => byHour[h]?.fail || 0);
+
+  chart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        {label:'Успішні', data:okData, backgroundColor:'#4caf5088', borderColor:'#4caf50', borderWidth:1},
-        {label:'Невдалі', data:failData, backgroundColor:'#ff525288', borderColor:'#ff5252', borderWidth:1},
+        {label:'Успішні', data:okData,   backgroundColor:'#4caf5099', borderColor:'#4caf50', borderWidth:1, borderRadius:2},
+        {label:'Невдалі', data:failData, backgroundColor:'#ff525266', borderColor:'#ff5252', borderWidth:1, borderRadius:2},
       ]
     },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{labels:{color:'#e6e6e6',font:{size:12}}}},
+      plugins:{
+        legend:{labels:{color:'#888',font:{size:11},boxWidth:12}},
+        tooltip:{callbacks:{title: items => 'Год. '+items[0].label}}
+      },
       scales:{
-        x:{ticks:{color:'#888',maxTicksLimit:12},grid:{color:'#333'}},
-        y:{ticks:{color:'#888'},grid:{color:'#333'},beginAtZero:true},
+        x:{stacked:false, ticks:{color:'#555',maxTicksLimit:16,font:{size:10}}, grid:{color:'#1e1e1e'}},
+        y:{stacked:false, ticks:{color:'#555',font:{size:10}}, grid:{color:'#1e1e1e'}, beginAtZero:true},
       }
     }
   });
 }
 
-// ── Config load ───────────────────────────────────────────────────────────────
-async function loadCfg() {
-  cfg = await apiFetch('/api/config');
-  return cfg;
-}
-
-async function loadSettingsForm() {
-  await loadCfg();
-  document.getElementById('inp-token').value = cfg._token_set ? '(токен збережено, введіть новий щоб змінити)' : '';
-  document.getElementById('chk-autorefresh').checked = !!cfg.autorefresh;
-  document.getElementById('chk-autobump').checked    = !!cfg.autobump;
-}
-
-function toggleToken() {
-  const inp = document.getElementById('inp-token');
-  inp.type = inp.type==='password' ? 'text' : 'password';
-}
-
-async function saveSettings() {
-  const tokenVal = document.getElementById('inp-token').value.trim();
-  const patch = {
-    ...cfg,
-    autorefresh: document.getElementById('chk-autorefresh').checked,
-    autobump:    document.getElementById('chk-autobump').checked,
-  };
-  // only update token if user typed something meaningful
-  if (tokenVal && !tokenVal.startsWith('(')) {
-    patch.token = tokenVal;
-  }
-  // collect market data from DOM
-  patch.markets = collectMarketsFromDOM();
-  try {
-    await apiFetch('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
-    notify('✅ Збережено');
-    document.getElementById('save-status').textContent = 'Збережено: '+new Date().toLocaleTimeString();
-    await loadCfg();
-  } catch(e){ notify('⛔ '+e.message, false); }
-}
-
-async function refreshCache() {
-  await apiFetch('/api/refresh-cache', {method:'POST'});
-  notify('📦 Кеш оновлюється…');
-}
-
-// ── Markets render ────────────────────────────────────────────────────────────
+// ── markets render ────────────────────────────────────────────────────────────
 async function renderMarkets() {
   await loadCfg();
-  const container = document.getElementById('markets-list');
-  container.innerHTML = '';
-  const sel = document.getElementById('mkt-select');
-  sel.innerHTML = '';
-
-  (cfg.markets || []).forEach((mkt, idx) => {
-    const card = buildMarketCard(mkt, idx);
-    container.appendChild(card);
-
-    const opt = document.createElement('option');
-    opt.value = mkt.name; opt.textContent = mkt.name;
-    sel.appendChild(opt);
-  });
+  _renderMarketList();
+  _rebuildMktSelect();
 }
 
-function buildMarketCard(mkt, idx) {
+function _renderMarketList() {
+  const c = document.getElementById('markets-list');
+  c.innerHTML = '';
+  marketsLocal.forEach((m, i) => c.appendChild(buildMktCard(m, i)));
+}
+
+function _rebuildMktSelect() {
+  const sel = document.getElementById('mkt-sel');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  marketsLocal.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.name; o.textContent = m.name;
+    sel.appendChild(o);
+  });
+  if (prev) sel.value = prev;
+}
+
+function buildMktCard(m, idx) {
   const div = document.createElement('div');
-  div.className = 'market-card' + (mkt.enabled===false ? ' disabled' : '');
+  div.className = 'mkt-card' + (m.enabled===false?' off':'');
   div.dataset.idx = idx;
 
+  const on = m.enabled !== false;
   div.innerHTML = `
-    <div class="mc-head">
-      <input class="mc-name" value="${esc(mkt.name)}" placeholder="Назва ринку" style="background:transparent;border:none;font-size:15px;font-weight:600;color:var(--text);flex:1"/>
-      <span class="badge ${mkt.enabled!==false?'badge-on':'badge-off'}">${mkt.enabled!==false?'Активний':'Вимкнено'}</span>
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-        <input type="checkbox" class="mkt-enabled" ${mkt.enabled!==false?'checked':''} onchange="toggleEnabled(this)"/> Вкл
+    <div class="mkt-head">
+      <input class="mkt-name-inp" value="${x(m.name)}" placeholder="Назва"/>
+      <span class="badge ${on?'b-on':'b-off'}" id="bdg-${idx}">${on?'ON':'OFF'}</span>
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub);cursor:pointer">
+        <input type="checkbox" class="mkt-en" ${on?'checked':''} onchange="toggleMktEnabled(this,${idx})"/> Активний
       </label>
-      <button class="btn-sm btn-danger" onclick="removeMarket(${idx})">✕</button>
+      <button class="btn-s btn-d" onclick="removeMkt(${idx})">✕</button>
     </div>
     <div class="row" style="margin-bottom:8px">
       <label>URL:</label>
-      <input class="wide mkt-url" value="${esc(mkt.url||'')}" placeholder="https://lzt.market/telegram/?..."/>
+      <input class="wide mkt-url" value="${x(m.url||'')}"/>
     </div>
-    <div class="row">
-      <label>Лотів у таблиці:</label>
-      <input type="number" class="mkt-count" value="${mkt.count||10}" min="1" max="50"/>
-      <label>Топ-N:</label>
-      <input type="number" class="mkt-topn" value="${mkt.top_n||1}" min="1" max="20"/>
-      <label>Інтервал оновлення (с):</label>
-      <input type="number" class="mkt-refresh" value="${mkt.refresh_interval||60}" min="30" max="3600"/>
-      <label>Інтервал підняття (с):</label>
-      <input type="number" class="mkt-bump" value="${mkt.bump_interval||60}" min="30" max="3600"/>
+    <div class="row" style="row-gap:6px">
+      <label>Лотів:</label><input type="number" class="mkt-cnt" value="${m.count||10}" min="1" max="50"/>
+      <label>Топ-N:</label><input type="number" class="mkt-topn" value="${m.top_n||1}" min="1" max="20"/>
+      <label>Оновл. (с):</label><input type="number" class="mkt-ri" value="${m.refresh_interval||60}" min="30" max="3600"/>
+      <label>Підн. (с):</label><input type="number" class="mkt-bi" value="${m.bump_interval||60}" min="30" max="3600"/>
     </div>
     <div class="row" style="margin-top:8px">
-      <label>Робочі години:</label>
-      <input type="time" class="mkt-from" value="${mkt.work_from||''}" placeholder="09:00"/>
+      <label>🕐 Робочі години:</label>
+      <input type="time" class="mkt-from" value="${m.work_from||''}"/>
       <span style="color:var(--sub)">—</span>
-      <input type="time" class="mkt-to" value="${mkt.work_to||''}" placeholder="23:00"/>
-      <span style="font-size:11px;color:var(--sub)">(порожньо = цілодобово)</span>
+      <input type="time" class="mkt-to" value="${m.work_to||''}"/>
+      <span style="font-size:10px;color:var(--sub)">(порожньо = цілодобово)</span>
     </div>
-    <div class="card-title" style="margin-top:10px">Теги для підняття</div>
+    <div class="card-hd" style="margin-top:10px">Теги для підняття</div>
     <div class="tags-grid mkt-tags">
-      ${(mkt.tags||[]).map((t,ti)=>`
+      ${(m.tags||[]).map(t=>`
         <div class="tag-row">
-          <input class="tag-name" value="${esc(t.tag||'')}" placeholder="Назва тегу"/>
-          <input type="number" class="tag-count" value="${t.count||1}" min="1" max="50" style="width:55px"/>
-          <button class="btn-sm" onclick="removeTag(this)">✕</button>
+          <input class="tname" value="${x(t.tag||'')}" placeholder="Назва тегу"/>
+          <input class="tcnt" type="number" value="${t.count||1}" min="1" max="50"/>
+          <button class="btn-s" onclick="this.closest('.tag-row').remove()">✕</button>
         </div>`).join('')}
     </div>
     <div class="row" style="margin-top:8px;gap:6px">
-      <button class="btn-sm" onclick="addTag(this)">+ Тег</button>
-      <button class="btn-sm" onclick="bumpNow('${esc(mkt.name)}')">⚡ Підняти зараз</button>
-    </div>
-  `;
+      <button class="btn-s" onclick="addTagRow(this)">+ Тег</button>
+      <button class="btn-s" onclick="bumpNow('${x(m.name)}')">⚡ Підняти зараз</button>
+    </div>`;
   return div;
 }
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function x(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-function toggleEnabled(chk) {
-  const card = chk.closest('.market-card');
-  const badge = card.querySelector('.badge');
+function toggleMktEnabled(chk, idx) {
+  const card = chk.closest('.mkt-card');
   const on = chk.checked;
-  card.classList.toggle('disabled', !on);
-  badge.className = 'badge ' + (on ? 'badge-on' : 'badge-off');
-  badge.textContent = on ? 'Активний' : 'Вимкнено';
+  card.classList.toggle('off', !on);
+  card.querySelector('.badge').className = 'badge '+(on?'b-on':'b-off');
+  card.querySelector('.badge').textContent = on?'ON':'OFF';
 }
 
-function addTag(btn) {
-  const grid = btn.closest('.market-card').querySelector('.mkt-tags');
-  const div = document.createElement('div');
-  div.className = 'tag-row';
-  div.innerHTML = `<input class="tag-name" placeholder="Назва тегу"/>
-    <input type="number" class="tag-count" value="1" min="1" max="50" style="width:55px"/>
-    <button class="btn-sm" onclick="removeTag(this)">✕</button>`;
-  grid.appendChild(div);
+function addTagRow(btn) {
+  const grid = btn.closest('.mkt-card').querySelector('.mkt-tags');
+  const d = document.createElement('div');
+  d.className = 'tag-row';
+  d.innerHTML = `<input class="tname" placeholder="Назва тегу"/>
+    <input class="tcnt" type="number" value="1" min="1" max="50"/>
+    <button class="btn-s" onclick="this.closest('.tag-row').remove()">✕</button>`;
+  grid.appendChild(d);
 }
-
-function removeTag(btn) { btn.closest('.tag-row').remove(); }
 
 function addMarket() {
-  if (!cfg.markets) cfg.markets = [];
-  cfg.markets.push({name:'Новий ринок',url:'',tags:[],count:10,top_n:1,
-    refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:''});
-  renderMarkets();
+  const newMkt = {name:'Новий ринок',url:'',tags:[],count:10,top_n:1,
+    refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:''};
+  marketsLocal.push(newMkt);
+  const c = document.getElementById('markets-list');
+  c.appendChild(buildMktCard(newMkt, marketsLocal.length-1));
+  _rebuildMktSelect();
 }
 
-async function removeMarket(idx) {
-  if (!confirm('Видалити цей ринок?')) return;
-  cfg.markets.splice(idx, 1);
-  await apiFetch('/api/config', {method:'POST', body:JSON.stringify({data:cfg})});
+function removeMkt(idx) {
+  if (!confirm('Видалити ринок?')) return;
+  marketsLocal.splice(idx, 1);
+  _renderMarketList();
+  _rebuildMktSelect();
+}
+
+function collectMarkets() {
+  return Array.from(document.querySelectorAll('.mkt-card')).map(card => ({
+    name:             card.querySelector('.mkt-name-inp').value.trim(),
+    url:              card.querySelector('.mkt-url').value.trim(),
+    count:            +card.querySelector('.mkt-cnt').value||10,
+    top_n:            +card.querySelector('.mkt-topn').value||1,
+    refresh_interval: +card.querySelector('.mkt-ri').value||60,
+    bump_interval:    +card.querySelector('.mkt-bi').value||60,
+    work_from:        card.querySelector('.mkt-from').value,
+    work_to:          card.querySelector('.mkt-to').value,
+    enabled:          card.querySelector('.mkt-en').checked,
+    tags: Array.from(card.querySelectorAll('.tag-row'))
+      .map(r=>({tag:r.querySelector('.tname').value.trim(), count:+r.querySelector('.tcnt').value||1}))
+      .filter(t=>t.tag),
+  }));
+}
+
+// ── schedule grid ─────────────────────────────────────────────────────────────
+async function renderSchedule() {
   await loadCfg();
-  renderMarkets();
-}
+  const c = document.getElementById('sched-container');
+  c.innerHTML = '';
+  const markets = CFG.markets || [];
+  if (!markets.length) { c.innerHTML = '<div style="color:var(--sub)">Ринків немає — додайте їх у вкладці Ринки</div>'; return; }
 
-function collectMarketsFromDOM() {
-  const cards = document.querySelectorAll('.market-card');
-  return Array.from(cards).map(card => {
-    const tags = Array.from(card.querySelectorAll('.tag-row')).map(row => ({
-      tag:   row.querySelector('.tag-name').value.trim(),
-      count: parseInt(row.querySelector('.tag-count').value)||1,
-    })).filter(t=>t.tag);
-    return {
-      name:             card.querySelector('.mc-name').value.trim(),
-      url:              card.querySelector('.mkt-url').value.trim(),
-      count:            parseInt(card.querySelector('.mkt-count').value)||10,
-      top_n:            parseInt(card.querySelector('.mkt-topn').value)||1,
-      refresh_interval: parseInt(card.querySelector('.mkt-refresh').value)||60,
-      bump_interval:    parseInt(card.querySelector('.mkt-bump').value)||60,
-      work_from:        card.querySelector('.mkt-from').value,
-      work_to:          card.querySelector('.mkt-to').value,
-      enabled:          card.querySelector('.mkt-enabled').checked,
-      tags,
-    };
+  markets.forEach(m => {
+    const wrap = document.createElement('div');
+    const from = m.work_from ? parseInt(m.work_from.split(':')[0]) : 0;
+    const to   = m.work_to   ? parseInt(m.work_to.split(':')[0])   : 23;
+    const allDay = !m.work_from && !m.work_to;
+
+    const cells = Array.from({length:24},(_,h)=>{
+      const active = m.enabled!==false && (allDay || (h>=from && h<=to));
+      return `<div class="sched-cell" style="background:${active?'var(--green)':'var(--border)'};height:${active?22:10}px">
+        <div class="sched-tip">${h}:00${active?' ✅':' —'}</div></div>`;
+    }).join('');
+
+    const lbls = Array.from({length:24},(_,h)=>`<div class="sched-lbl">${h}</div>`).join('');
+
+    wrap.innerHTML = `
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${m.enabled!==false?'var(--text)':'var(--sub)'}">
+          ${x(m.name)}
+          <span style="font-size:10px;font-weight:400;color:var(--sub);margin-left:8px">
+            ${allDay?'цілодобово':(m.work_from+' — '+m.work_to)}
+            ${m.enabled===false?' [вимкнено]':''}
+          </span>
+        </div>
+        <div class="sched-grid">${cells}</div>
+        <div class="sched-labels">${lbls}</div>
+      </div>`;
+    c.appendChild(wrap);
   });
 }
 
-// ── Listings table ─────────────────────────────────────────────────────────────
+// ── listings table ─────────────────────────────────────────────────────────────
 async function loadListings() {
-  const mktName = document.getElementById('mkt-select').value;
-  if (!mktName) return;
-  document.getElementById('listings-mkt-name').textContent = mktName;
-  const tbody = document.getElementById('listings-body');
-  tbody.innerHTML = '<tr><td colspan="6" style="color:var(--sub)">Завантаження…</td></tr>';
+  const name = document.getElementById('mkt-sel').value;
+  if (!name) return;
+  document.getElementById('lst-name').textContent = name;
+  const tb = document.getElementById('lst-body');
+  tb.innerHTML = '<tr><td colspan="6" style="color:var(--sub);text-align:center">Завантаження…</td></tr>';
   try {
-    const data = await apiFetch('/api/market-listings/'+encodeURIComponent(mktName));
-    tbody.innerHTML = '';
-    data.forEach((lot,i) => {
-      const cls = lot.is_mine ? 'mine' : 'other';
+    const data = await api('/api/market-listings/'+encodeURIComponent(name));
+    tb.innerHTML = '';
+    data.forEach((l,i)=>{
+      const cls = l.is_mine?'mine':'other';
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td><a href="${lot.link}" target="_blank" class="${cls}">${esc(lot.title)}</a></td>
-        <td class="${cls}">${esc(lot.seller)}</td>
-        <td>${esc(lot.price)}</td>
-        <td style="color:var(--sub);font-size:11px">${lot.bumped_at?'✅ '+lot.bumped_at:''}</td>
-        <td>${lot.is_mine?'✓':''}</td>`;
-      tbody.appendChild(tr);
+      tr.innerHTML = `<td>${i+1}</td>
+        <td><a href="${l.link}" target="_blank" class="${cls}">${x(l.title)}</a></td>
+        <td class="${cls}">${x(l.seller)}</td>
+        <td>${x(l.price)}</td>
+        <td style="font-size:10px;color:var(--sub)">${l.bumped_at||''}</td>
+        <td>${l.is_mine?'✓':''}</td>`;
+      tb.appendChild(tr);
     });
-  } catch(e){
-    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Помилка: ${e.message}</td></tr>`;
+  } catch(e) {
+    tb.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Помилка: ${e.message}</td></tr>`;
   }
 }
 
-// ── Bump now ─────────────────────────────────────────────────────────────────
-async function bumpNow(name) {
-  try {
-    await apiFetch('/api/bump-now/'+encodeURIComponent(name), {method:'POST'});
-    notify('⚡ Підняття запущено для «'+name+'»');
-  } catch(e){ notify('⛔ '+e.message, false); }
+// ── settings form ─────────────────────────────────────────────────────────────
+async function populateSettings() {
+  await loadCfg();
+  const hint = document.getElementById('tok-hint');
+  if (CFG._token_set) {
+    document.getElementById('inp-token').value = '';
+    document.getElementById('inp-token').placeholder = '••• токен збережено, введіть новий щоб змінити •••';
+    hint.textContent = '⚠ Токен вже збережено на сервері. Поле порожнє = залишити поточний.';
+  } else {
+    hint.textContent = 'Токен не встановлено.';
+  }
+  document.getElementById('chk-ar').checked = !!CFG.autorefresh;
+  document.getElementById('chk-ab').checked = !!CFG.autobump;
 }
 
-// ── WebSocket logs ────────────────────────────────────────────────────────────
-function connectWs() {
+function toggleTok() {
+  const i = document.getElementById('inp-token');
+  i.type = i.type==='password'?'text':'password';
+}
+
+// ── save all ──────────────────────────────────────────────────────────────────
+async function saveAll() {
+  // collect markets from DOM if markets pane is open
+  const mktPane = document.getElementById('pane-markets');
+  let markets;
+  if (mktPane.classList.contains('active') || document.querySelectorAll('.mkt-card').length) {
+    markets = collectMarkets();
+  } else {
+    markets = marketsLocal;
+  }
+
+  const tokenVal = document.getElementById('inp-token').value.trim();
+  const patch = {
+    ...CFG,
+    autorefresh: document.getElementById('chk-ar').checked,
+    autobump:    document.getElementById('chk-ab').checked,
+    markets,
+  };
+  if (tokenVal) patch.token = tokenVal;
+
+  try {
+    await api('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
+    toast('✅ Збережено');
+    document.getElementById('save-hint').textContent = 'Збережено: '+new Date().toLocaleTimeString();
+    document.getElementById('inp-token').value = '';
+    await loadCfg();
+    if (document.getElementById('pane-schedule').classList.contains('active')) renderSchedule();
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function bumpNow(name) {
+  try {
+    await api('/api/bump-now/'+encodeURIComponent(name), {method:'POST'});
+    toast('⚡ Підняття запущено: '+name);
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function refreshCache() {
+  await api('/api/refresh-cache', {method:'POST'});
+  toast('📦 Кеш оновлюється…');
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function connectWS() {
   const proto = location.protocol==='https:'?'wss':'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/logs`);
-  const statusEl = document.getElementById('ws-status');
 
-  ws.onopen = () => { statusEl.style.color='var(--green)'; statusEl.textContent='●  підключено'; };
-  ws.onclose= () => { statusEl.style.color='var(--sub)';   statusEl.textContent='●  відключено'; setTimeout(connectWs,3000); };
-  ws.onerror= () => ws.close();
+  const setDot = (on) => {
+    [document.getElementById('ws-dot'), document.getElementById('ws-dot2')]
+      .forEach(d=>{ if(d){ d.style.background=on?'var(--green)':'var(--sub)'; } });
+  };
 
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    appendLog(msg);
+  ws.onopen  = () => setDot(true);
+  ws.onclose = () => { setDot(false); setTimeout(connectWS, 3000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    try { addLogLine(JSON.parse(e.data)); } catch(_) {}
   };
 }
 
-function appendLog(msg) {
+function addLogLine(msg) {
   logLines.push(msg);
-  if (logLines.length > 200) logLines = logLines.slice(-200);
-  renderLogBox('log-box', logLines);
-  renderLogBox('log-box-dash', logLines.slice(-20));
+  if (logLines.length > 300) logLines = logLines.slice(-300);
+  _paintLog('log-full', logLines, false);
+  _paintLog('log-dash', logLines.slice(-30), false);
 }
 
-function renderLogBox(id, lines) {
-  const box = document.getElementById(id);
-  if (!box) return;
-  const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 40;
-  box.innerHTML = lines.map(m =>
-    `<div class="log-${m.level||'info'}"><span style="color:var(--sub)">${m.time} </span>${esc(m.text)}</div>`
-  ).join('');
-  if (atBottom) box.scrollTop = box.scrollHeight;
+function _paintLog(id, lines, scroll=true) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const atBot = el.scrollHeight - el.scrollTop <= el.clientHeight + 60;
+  el.innerHTML = lines.map(m => {
+    const cls = {ok:'l-ok', warn:'l-warn', error:'l-error', info:'l-info'}[m.level]||'l-info';
+    return `<div><span class="l-ts">${m.time} </span><span class="${cls}">${x(m.text)}</span></div>`;
+  }).join('');
+  if (atBot || scroll) el.scrollTop = el.scrollHeight;
 }
 
-function clearLog() { logLines=[]; renderLogBox('log-box',[]); }
+function clearLogs() { logLines=[]; _paintLog('log-full',[]); _paintLog('log-dash',[]); }
 
-// ── ZIP download ──────────────────────────────────────────────────────────────
-function downloadZip() {
-  window.location.href = '/api/download-zip';
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
-  connectWs();
-  await loadStats();
-  // auto-refresh stats every 30s
-  setInterval(loadStats, 30000);
-  // load config quietly
+  connectWS();
   await loadCfg();
+  await loadStats();
+  setInterval(loadStats, 30000);
 })();
 </script>
 </body>
