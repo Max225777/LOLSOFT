@@ -240,6 +240,13 @@ tr:hover td{background:#1e1e1e}
     <div class="card-hd">Статус кешу лотів</div>
     <div id="cache-status" style="font-size:12px;color:var(--sub)">Завантаження…</div>
     <div id="cache-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+      🔄 Автоматично оновлюється <b style="color:var(--text)">раз на годину</b>. Ручне оновлення — кнопки нижче або у вкладці Ринки.
+    </div>
+    <div class="row" style="margin-top:8px;gap:6px">
+      <button class="btn-s" onclick="manualRefreshAll('tags')">🏷 Оновити теги</button>
+      <button class="btn-s" onclick="manualRefreshAll('items')">📦 Оновити лоти</button>
+    </div>
   </div>
 
   <div class="card">
@@ -434,6 +441,8 @@ function buildMktCard(m, idx) {
     <div class="row" style="margin-top:8px;gap:6px">
       <button class="btn-s" onclick="addTagRow(this)">+ Тег</button>
       <button class="btn-s" onclick="bumpNow('${x(m.name)}')">⚡ Підняти зараз</button>
+      <button class="btn-s" onclick="refreshMarketTags('${x(m.name)}')">🏷 Теги</button>
+      <button class="btn-s" onclick="refreshMarketItems('${x(m.name)}')">📦 Лоти</button>
     </div>`;
   return div;
 }
@@ -626,6 +635,26 @@ async function saveAll() {
     await loadCfg();
     if (document.getElementById('pane-schedule').classList.contains('active')) renderSchedule();
   } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function refreshMarketTags(name) {
+  try {
+    await api('/api/refresh-tags', {method:'POST'});
+    toast('🏷 Теги оновлюються…');
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function refreshMarketItems(name) {
+  try {
+    await api('/api/refresh-cache', {method:'POST'});
+    toast('📦 Лоти оновлюються…');
+    setTimeout(loadCacheStatus, 5000);
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function manualRefreshAll(type) {
+  if (type === 'tags') return refreshMarketTags('');
+  return refreshMarketItems('');
 }
 
 async function bumpNow(name) {

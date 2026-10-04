@@ -448,7 +448,7 @@ class SchedulerManager:
         if not token:
             return
         try:
-            broadcaster.emit("📦 Завантаження кешу лотів…", "info")
+            broadcaster.emit("━━━ 📦 ОНОВЛЕННЯ КЕШУ ЛОТІВ ━━━", "ok")
             fetch_my_tags(token)
             all_items = fetch_all_my_items(token)
             id_to_name = {v: k for k, v in _tag_id_map.items()}
@@ -466,7 +466,7 @@ class SchedulerManager:
             _tag_items_cache = cache
             _cache_loaded_at = datetime.now().strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
-            broadcaster.emit(f"📦 Кеш готовий: {len(all_items)} лотів, {total} по тегах", "ok")
+            broadcaster.emit(f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
@@ -547,6 +547,22 @@ def get_bump_log():
 @app.post("/api/refresh-cache")
 def refresh_cache():
     threading.Thread(target=sched_mgr._warmup_cache, daemon=True).start()
+    return {"ok": True}
+
+@app.post("/api/refresh-tags")
+def refresh_tags():
+    def _do():
+        token = sched_mgr._token()
+        if not token:
+            broadcaster.emit("⚠ Немає токена для завантаження тегів", "warn")
+            return
+        try:
+            broadcaster.emit("🏷 Оновлення тегів…", "info")
+            tags = fetch_my_tags(token)
+            broadcaster.emit(f"🏷 Теги завантажено: {', '.join(tags)}", "ok")
+        except Exception as e:
+            broadcaster.emit(f"⚠ Теги: {e}", "warn")
+    threading.Thread(target=_do, daemon=True).start()
     return {"ok": True}
 
 @app.post("/api/bump-now/{market_name}")
