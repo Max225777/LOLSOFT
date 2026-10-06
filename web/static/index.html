@@ -13,6 +13,12 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* bottom console */
+#console{flex-shrink:0;height:180px;background:#0d0d0d;border-top:1px solid var(--border);display:flex;flex-direction:column}
+#console-bar{display:flex;align-items:center;gap:8px;padding:4px 10px;background:#141414;border-bottom:1px solid var(--border);flex-shrink:0}
+#console-bar span{font-size:11px;color:var(--sub)}
+#console-body{flex:1;overflow-y:auto;padding:5px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;line-height:1.6;word-break:break-word;white-space:pre-wrap}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 
@@ -31,7 +37,7 @@ a:hover{text-decoration:underline}
 .tab.active{background:var(--accent);color:#111;font-weight:700}
 
 /* panes */
-#content{flex:1;overflow:hidden;position:relative}
+#content{flex:1;overflow:hidden;position:relative;min-height:0}
 .pane{display:none;position:absolute;inset:0;overflow-y:auto;padding:14px;gap:14px;flex-direction:column}
 .pane.active{display:flex}
 
@@ -138,7 +144,6 @@ tr:hover td{background:#1e1e1e}
   <div class="tab" data-tab="markets">🏪 Ринки</div>
   <div class="tab" data-tab="schedule">🕐 Розклад</div>
   <div class="tab" data-tab="settings">⚙ Налаштування</div>
-  <div class="tab" data-tab="logs">📋 Логи</div>
 </div>
 
 <div id="content">
@@ -259,18 +264,18 @@ tr:hover td{background:#1e1e1e}
   </div>
 </div>
 
-<!-- ── LOGS ───────────────────────────────────────────────────────────────── -->
-<div class="pane" id="pane-logs">
-  <div class="row">
-    <span style="font-size:11px;color:var(--sub)">Live WebSocket</span>
-    <div id="ws-dot2" style="width:7px;height:7px;border-radius:50%;background:var(--sub);transition:.3s"></div>
+</div><!-- /content -->
+
+<div id="console">
+  <div id="console-bar">
+    <span style="color:var(--accent);font-weight:700;font-size:11px">CONSOLE</span>
+    <div id="ws-dot2" style="width:6px;height:6px;border-radius:50%;background:var(--sub);transition:.3s"></div>
+    <span id="console-count" style="color:var(--sub)"></span>
     <div class="spacer"></div>
     <button class="btn-s" onclick="clearLogs()">Очистити</button>
   </div>
-  <div class="logbox" id="log-full" style="flex:1;min-height:0;height:calc(100vh - 160px)"></div>
+  <div id="console-body"></div>
 </div>
-
-</div><!-- /content -->
 <div id="toast"></div>
 
 <script>
@@ -702,23 +707,24 @@ function connectWS() {
 
 function addLogLine(msg) {
   logLines.push(msg);
-  if (logLines.length > 300) logLines = logLines.slice(-300);
-  _paintLog('log-full', logLines, false);
-  _paintLog('log-dash', logLines.slice(-30), false);
+  if (logLines.length > 500) logLines = logLines.slice(-500);
+  _paintConsole();
 }
 
-function _paintLog(id, lines, scroll=true) {
-  const el = document.getElementById(id);
+function _paintConsole() {
+  const el = document.getElementById('console-body');
   if (!el) return;
-  const atBot = el.scrollHeight - el.scrollTop <= el.clientHeight + 60;
-  el.innerHTML = lines.map(m => {
-    const cls = {ok:'l-ok', warn:'l-warn', error:'l-error', info:'l-info'}[m.level]||'l-info';
-    return `<div><span class="l-ts">${m.time} </span><span class="${cls}">${x(m.text)}</span></div>`;
+  const atBot = el.scrollHeight - el.scrollTop <= el.clientHeight + 40;
+  el.innerHTML = logLines.map(m => {
+    const col = {ok:'#6dbf6d', warn:'#ffc857', error:'#ff5252', info:'#444'}[m.level]||'#444';
+    return `<div><span style="color:#2a2a2a">${m.time} </span><span style="color:${col}">${x(m.text)}</span></div>`;
   }).join('');
-  if (atBot || scroll) el.scrollTop = el.scrollHeight;
+  if (atBot) el.scrollTop = el.scrollHeight;
+  const cnt = document.getElementById('console-count');
+  if (cnt) cnt.textContent = logLines.length + ' рядків';
 }
 
-function clearLogs() { logLines=[]; _paintLog('log-full',[]); _paintLog('log-dash',[]); }
+function clearLogs() { logLines=[]; _paintConsole(); }
 
 // ── bump log table ────────────────────────────────────────────────────────────
 let bumpLogData = [];
