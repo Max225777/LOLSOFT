@@ -417,6 +417,11 @@ class SchedulerManager:
         self._sched.remove_all_jobs()
         self._engines.clear()
 
+        # always load cache on reload and schedule hourly refresh
+        threading.Thread(target=self._warmup_cache, daemon=True).start()
+        self._sched.add_job(self._warmup_cache, "interval", hours=1,
+                            id="cache_refresh", replace_existing=True)
+
         if not cfg.get("autobump", False) and not cfg.get("autorefresh", False):
             return
 
@@ -437,15 +442,12 @@ class SchedulerManager:
                 self._sched.add_job(engine.bump_tick, "interval", seconds=bi,
                                     id=f"bump_{name}", replace_existing=True)
 
-        # load items cache on start + every hour
-        threading.Thread(target=self._warmup_cache, daemon=True).start()
-        self._sched.add_job(self._warmup_cache, "interval", hours=1,
-                            id="cache_refresh", replace_existing=True)
 
     def _warmup_cache(self):
-        global _tag_items_cache, _tag_id_map
+        global _tag_items_cache, _tag_id_map, _cache_loaded_at
         token = self._token()
         if not token:
+            broadcaster.emit("⚠ Кеш: токен не задано в налаштуваннях", "warn")
             return
         try:
             broadcaster.emit("━━━ 📦 ОНОВЛЕННЯ КЕШУ ЛОТІВ ━━━", "ok")
@@ -466,7 +468,8 @@ class SchedulerManager:
             _tag_items_cache = cache
             _cache_loaded_at = datetime.now().strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
-            broadcaster.emit(f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
+            broadcaster.emit(
+                f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
