@@ -132,6 +132,7 @@ tr:hover td{background:#1e1e1e}
   <div class="spacer"></div>
 </div>
 
+<datalist id="tags-datalist"></datalist>
 <div id="nav">
   <div class="tab active" data-tab="dash">📊 Дашборд</div>
   <div class="tab" data-tab="markets">🏪 Ринки</div>
@@ -372,9 +373,24 @@ function renderBumpGrid(rows) {
   }
 }
 
+// ── available tags cache ──────────────────────────────────────────────────────
+let availableTags = [];
+
+async function loadAvailableTags() {
+  try {
+    availableTags = await api('/api/tags');
+    // update datalist
+    const dl = document.getElementById('tags-datalist');
+    if (dl) {
+      dl.innerHTML = availableTags.map(t => `<option value="${x(t)}">`).join('');
+    }
+  } catch(e) {}
+}
+
 // ── markets render ────────────────────────────────────────────────────────────
 async function renderMarkets() {
   await loadCfg();
+  await loadAvailableTags();
   _renderMarketList();
   _rebuildMktSelect();
 }
@@ -433,7 +449,7 @@ function buildMktCard(m, idx) {
     <div class="tags-grid mkt-tags">
       ${(m.tags||[]).map(t=>`
         <div class="tag-row">
-          <input class="tname" value="${x(t.tag||'')}" placeholder="Назва тегу"/>
+          <input class="tname" value="${x(t.tag||'')}" placeholder="Назва тегу" list="tags-datalist" autocomplete="off"/>
           <input class="tcnt" type="number" value="${t.count||1}" min="1" max="50"/>
           <button class="btn-s" onclick="this.closest('.tag-row').remove()">✕</button>
         </div>`).join('')}
@@ -461,7 +477,7 @@ function addTagRow(btn) {
   const grid = btn.closest('.mkt-card').querySelector('.mkt-tags');
   const d = document.createElement('div');
   d.className = 'tag-row';
-  d.innerHTML = `<input class="tname" placeholder="Назва тегу"/>
+  d.innerHTML = `<input class="tname" placeholder="Назва тегу" list="tags-datalist" autocomplete="off"/>
     <input class="tcnt" type="number" value="1" min="1" max="50"/>
     <button class="btn-s" onclick="this.closest('.tag-row').remove()">✕</button>`;
   grid.appendChild(d);
@@ -589,6 +605,7 @@ async function loadCacheStatus() {
 
 async function populateSettings() {
   await loadCfg();
+  await loadAvailableTags();
   await loadCacheStatus();
   const hint = document.getElementById('tok-hint');
   if (CFG._token_set) {

@@ -519,6 +519,10 @@ def set_config(body: ConfigIn):
 def get_stats():
     return stat_summary()
 
+@app.get("/api/tags")
+def get_tags():
+    return sorted(_tag_id_map.keys())
+
 @app.get("/api/cache-status")
 def cache_status():
     tags = [
