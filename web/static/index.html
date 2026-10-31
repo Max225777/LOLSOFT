@@ -12,7 +12,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column}
 
 /* ── topbar ── */
 #topbar{display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
@@ -23,7 +23,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .spacer{flex:1}
 
 /* ── main 2-col layout ── */
-#main{flex:1;display:flex;overflow:hidden;width:100%}
+#main{flex:1;display:flex;overflow:hidden;min-height:0}
 
 /* ── left panel ── */
 #left-panel{width:50%;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
