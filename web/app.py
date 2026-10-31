@@ -390,13 +390,22 @@ class MarketEngine:
             broadcaster.emit(f"⚠ [{name}] немає тегів у черзі", "warn")
             return
 
-        tag = queue[self._queue_pos % len(queue)]
-        self._queue_pos = (self._queue_pos + 1) % len(queue)
+        now = time.time()
 
-        now      = time.time()
-        my_items = items_for_tag(tag)
-        if not my_items:
-            broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено в кеші", "warn")
+        # Find next tag in queue that has items; skip empty tags
+        tag      = None
+        my_items = []
+        for _ in range(len(queue)):
+            candidate = queue[self._queue_pos % len(queue)]
+            self._queue_pos = (self._queue_pos + 1) % len(queue)
+            items = items_for_tag(candidate)
+            if items:
+                tag      = candidate
+                my_items = items
+                break
+
+        if not tag:
+            broadcaster.emit(f"⚠ [{name}] немає лотів в жодному тезі", "warn")
             return
 
         total     = len(my_items)
