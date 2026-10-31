@@ -524,10 +524,11 @@ def get_config():
 @app.post("/api/config")
 def set_config(body: ConfigIn):
     cfg = body.data
-    # if token looks masked, keep old one
     old = load_config()
-    if "…" in cfg.get("token","") or cfg.get("token","") == "****":
-        cfg["token"] = old.get("token", "")
+    # keep token: if not provided or masked, use existing (file or env var)
+    tok = cfg.get("token", "")
+    if not tok or "…" in tok or tok == "****":
+        cfg["token"] = old.get("token", "") or os.environ.get("LOLZ_TOKEN", "")
     save_config(cfg)
     sched_mgr.reload(cfg)
     broadcaster.emit("⚙ Налаштування збережено", "info")
