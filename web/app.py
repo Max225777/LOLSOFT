@@ -312,6 +312,17 @@ class MarketEngine:
         self.token_fn     = token_fn  # callable → str
         self._bump_idx:  dict[str, int]   = {}
         self._cooldowns: dict[str, float] = {}  # item_id → expires_at (time.time())
+        self._queue_pos: int = 0  # position in weighted tag queue
+
+    def _build_queue(self) -> list[str]:
+        """Weighted queue: each tag repeated count times. e.g. Новореги×3 + 2года×2."""
+        queue = []
+        for tag_cfg in self.cfg.get("tags", []):
+            tag   = tag_cfg.get("tag", "").strip()
+            count = max(1, tag_cfg.get("count", 1))
+            if tag:
+                queue.extend([tag] * count)
+        return queue
 
     def get_token(self) -> str:
         return self.token_fn()
@@ -373,76 +384,70 @@ class MarketEngine:
             except Exception:
                 pass
 
-        now = time.time()
-        for tag_cfg in tags:
-            tag       = tag_cfg.get("tag", "").strip()
-            goal      = tag_cfg.get("count", 1)  # successful bumps to achieve this cycle
-            if not tag:
+        # Weighted queue: 1 bump per tick, position advances each tick
+        queue = self._build_queue()
+        if not queue:
+            broadcaster.emit(f"⚠ [{name}] немає тегів у черзі", "warn")
+            return
+
+        tag = queue[self._queue_pos % len(queue)]
+        self._queue_pos = (self._queue_pos + 1) % len(queue)
+
+        now      = time.time()
+        my_items = items_for_tag(tag)
+        if not my_items:
+            broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено в кеші", "warn")
+            return
+
+        total     = len(my_items)
+        start_idx = self._bump_idx.get(tag, 0) % total
+
+        for attempt in range(max(total, 10)):
+            idx = (start_idx + attempt) % total
+            it  = my_items[idx]
+            iid = str(it.get("item_id", ""))
+
+            if self._cooldowns.get(iid, 0) > now:
                 continue
-            my_items = items_for_tag(tag)
-            if not my_items:
-                broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено в кеші", "warn")
-                continue
 
-            bumped    = 0
-            total     = len(my_items)
-            start_idx = self._bump_idx.get(tag, 0) % total
-            tries     = 0
-            max_tries = max(total, 10)
+            title = it.get("title") or it.get("title_en") or f"#{iid}"
+            ok, reason = bump_item(token, iid)
 
-            while bumped < goal and tries < max_tries:
-                idx = (start_idx + tries) % total
-                it  = my_items[idx]
-                iid = str(it.get("item_id", ""))
+            if ok:
+                self._bump_idx[tag] = (idx + 1) % total
+                broadcaster.emit(f"✅ [{name}][{tag}] {title}", "ok")
+                record_bump(name, tag, iid, title, True, "")
+                return
 
-                # skip items in cooldown
-                cd_until = self._cooldowns.get(iid, 0)
-                if cd_until > now:
-                    tries += 1
-                    continue
+            elif reason.startswith("продано/видалено"):
+                broadcaster.emit(f"🗑 [{name}][{tag}] {title} — видалено", "warn")
+                record_bump(name, tag, iid, title, False, reason)
+                _tag_items_cache[tag] = [
+                    x for x in _tag_items_cache.get(tag, [])
+                    if str(x.get("item_id", "")) != iid
+                ]
+                my_items = _tag_items_cache.get(tag, [])
+                total    = len(my_items)
+                if total == 0:
+                    break
+                self._cooldowns.pop(iid, None)
 
-                title = it.get("title") or it.get("title_en") or f"#{iid}"
-                ok, reason = bump_item(token, iid)
-                tries += 1
+            elif reason.startswith("ліміт"):
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                record_bump(name, tag, iid, title, False, reason)
+                broadcaster.emit(f"🚫 [{name}][{tag}] {title} — ліміт, кулдаун 1 год", "warn")
 
-                if ok:
-                    bumped += 1
-                    self._bump_idx[tag] = (idx + 1) % total
-                    broadcaster.emit(f"✅ [{name}][{tag}] {title}", "ok")
-                    record_bump(name, tag, iid, title, True, "")
+            elif reason.startswith("кулдаун"):
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                broadcaster.emit(f"⏳ [{name}][{tag}] {title} — кулдаун, пропуск на 1 год", "warn")
 
-                elif reason.startswith("продано/видалено"):
-                    broadcaster.emit(f"🗑 [{name}][{tag}] {title} — видалено", "warn")
-                    record_bump(name, tag, iid, title, False, reason)
-                    _tag_items_cache[tag] = [
-                        x for x in _tag_items_cache.get(tag, [])
-                        if str(x.get("item_id", "")) != iid
-                    ]
-                    my_items = _tag_items_cache.get(tag, [])
-                    total = len(my_items)
-                    if total == 0:
-                        break
-                    self._cooldowns.pop(iid, None)
+            else:
+                broadcaster.emit(f"⛔ [{name}][{tag}] {title} — {reason}", "error")
+                record_bump(name, tag, iid, title, False, reason)
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
 
-                elif reason.startswith("ліміт"):
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    record_bump(name, tag, iid, title, False, reason)
-                    broadcaster.emit(f"🚫 [{name}][{tag}] {title} — ліміт, кулдаун 1 год", "warn")
-
-                elif reason.startswith("кулдаун"):
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    broadcaster.emit(f"⏳ [{name}][{tag}] {title} — кулдаун, пропуск на 1 год", "warn")
-
-                else:
-                    broadcaster.emit(f"⛔ [{name}][{tag}] {title} — {reason}", "error")
-                    record_bump(name, tag, iid, title, False, reason)
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-
-            if bumped < goal:
-                avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id","")), 0) <= now)
-                broadcaster.emit(
-                    f"⚠ [{name}][{tag}] зроблено {bumped}/{goal} підняттів ({avail} доступних із {total})", "warn"
-                )
+        avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
+        broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({avail} доступних із {total})", "warn")
 
 # ─── Scheduler manager ────────────────────────────────────────────────────────
 
