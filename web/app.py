@@ -11,6 +11,9 @@ import time
 import urllib.parse
 import zipfile
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_KYIV_TZ = ZoneInfo("Europe/Kyiv")
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +88,7 @@ def fmt_time(ts) -> str:
     if not ts:
         return "—"
     try:
-        return datetime.fromtimestamp(int(ts)).strftime("%d.%m %H:%M")
+        return datetime.fromtimestamp(int(ts), tz=_KYIV_TZ).strftime("%d.%m %H:%M")
     except Exception:
         return "—"
 
@@ -212,12 +215,12 @@ def record_bump(market_name: str, tag: str, item_id: str,
         "INSERT INTO bumps (market_name,tag,item_id,item_title,success,reason,logged_at)"
         " VALUES (?,?,?,?,?,?,?)",
         (market_name, tag, item_id, item_title, int(success), reason,
-         datetime.now().isoformat(timespec="seconds"))
+         datetime.now(_KYIV_TZ).isoformat(timespec="seconds"))
     )
     conn.commit(); conn.close()
 
 def today_iso() -> str:
-    return datetime.now().replace(hour=0,minute=0,second=0,microsecond=0).isoformat()
+    return datetime.now(_KYIV_TZ).replace(hour=0,minute=0,second=0,microsecond=0).isoformat()
 
 def stat_summary() -> dict:
     conn = db_conn()
@@ -279,7 +282,7 @@ class LogBroadcaster:
 
     def emit(self, text: str, level: str = "info"):
         msg = {"text": text, "level": level,
-               "time": datetime.now().strftime("%H:%M:%S")}
+               "time": datetime.now(_KYIV_TZ).strftime("%H:%M:%S")}
         self._log = (self._log + [msg])[-200:]
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._broadcast(msg), self._loop)
@@ -324,7 +327,7 @@ class MarketEngine:
         if not work_from or not work_to:
             return True
         try:
-            now = datetime.now().strftime("%H:%M")
+            now = datetime.now(_KYIV_TZ).strftime("%H:%M")
             return work_from <= now <= work_to
         except Exception:
             return True
@@ -525,7 +528,7 @@ class SchedulerManager:
                     elif isinstance(t, int) and t in id_to_name:
                         cache[id_to_name[t]].append(it)
             _tag_items_cache = cache
-            _cache_loaded_at = datetime.now().strftime("%H:%M:%S")
+            _cache_loaded_at = datetime.now(_KYIV_TZ).strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(
                 f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
