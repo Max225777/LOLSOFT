@@ -396,6 +396,9 @@ function renderTagChips() {
     fillPtr++;
   }
 
+  // Persist computed positions back so drag & drop can find them
+  CFG.tag_positions = positions;
+
   el.innerHTML = '';
 
   for (let i = 0; i < totalCells; i++) {
