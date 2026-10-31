@@ -259,8 +259,12 @@ tr:hover td{background:#1e1e1e}
     <div class="row" style="gap:8px">
       <button class="btn btn-p" onclick="saveAll()">💾 Зберегти</button>
       <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ Завантажити ZIP</button>
+      <button class="btn-s" onclick="copyConfigJson()" title="Скопіювати конфіг для Render ENV">📋 CONFIG_JSON</button>
     </div>
     <div id="save-hint" style="font-size:11px;color:var(--sub);margin-top:8px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">
+      📋 <b style="color:var(--text)">CONFIG_JSON</b> — скопіюй і встав як env var на Render щоб конфіг зберігся після редеплою.
+    </div>
   </div>
 </div>
 
@@ -677,6 +681,18 @@ async function refreshMarketItems(name) {
 async function manualRefreshAll(type) {
   if (type === 'tags') return refreshMarketTags('');
   return refreshMarketItems('');
+}
+
+async function copyConfigJson() {
+  try {
+    const cfg = await api('/api/config');
+    // include token placeholder note
+    const out = {...cfg};
+    delete out._token_set;
+    const json = JSON.stringify(out);
+    await navigator.clipboard.writeText(json);
+    toast('📋 CONFIG_JSON скопійовано — встав в Render → Environment → CONFIG_JSON');
+  } catch(e) { toast('⛔ '+e.message, false); }
 }
 
 async function bumpNow(name) {
