@@ -384,10 +384,8 @@ function renderTagChips() {
     else unplaced.push(t);
   });
 
-  // Total cells = at least cover all tags + a row of empty slack
-  const maxOccupied = Object.keys(cellMap).length ? Math.max(...Object.keys(cellMap).map(Number)) : -1;
-  const minCells = Math.max(visible.length + GRID_COLS, maxOccupied + GRID_COLS + 1);
-  const totalCells = Math.ceil(minCells / GRID_COLS) * GRID_COLS;
+  // Fixed grid: 5 cols × 7 rows = 35 cells
+  const totalCells = GRID_COLS * 7;
 
   // Place unplaced tags into first free cells
   let fillPtr = 0;
