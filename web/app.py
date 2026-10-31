@@ -420,17 +420,10 @@ class MarketEngine:
                 return
 
             elif reason.startswith("продано/видалено"):
-                broadcaster.emit(f"🗑 [{name}][{tag}] {title} — видалено", "warn")
+                # don't remove from cache — item may be relisted; recheck after 1h
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                 record_bump(name, tag, iid, title, False, reason)
-                _tag_items_cache[tag] = [
-                    x for x in _tag_items_cache.get(tag, [])
-                    if str(x.get("item_id", "")) != iid
-                ]
-                my_items = _tag_items_cache.get(tag, [])
-                total    = len(my_items)
-                if total == 0:
-                    break
-                self._cooldowns.pop(iid, None)
+                broadcaster.emit(f"🗑 [{name}][{tag}] {title} — не знайдено, перевіримо через 1 год", "warn")
 
             elif reason.startswith("ліміт"):
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
