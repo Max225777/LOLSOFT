@@ -34,10 +34,14 @@ API_BASE      = "https://prod-api.lzt.market"
 
 def load_config() -> dict:
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
-        return {"token": "", "interval": 60, "autorefresh": False,
-                "autobump": False, "markets": []}
+        cfg = {"token": "", "interval": 60, "autorefresh": False,
+               "autobump": False, "markets": []}
+    # env var overrides stored token if config token is empty
+    if not cfg.get("token"):
+        cfg["token"] = os.environ.get("LOLZ_TOKEN", "")
+    return cfg
 
 def save_config(cfg: dict):
     CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
