@@ -656,9 +656,9 @@ async function manualRefreshAll(type) {
 async function copyConfigJson() {
   try {
     const cfg = await api('/api/config');
-    // include token placeholder note
     const out = {...cfg};
     delete out._token_set;
+    delete out.token; // token comes from LOLZ_TOKEN env var, not CONFIG_JSON
     const json = JSON.stringify(out);
     await navigator.clipboard.writeText(json);
     toast('📋 CONFIG_JSON скопійовано — встав в Render → Environment → CONFIG_JSON');
