@@ -593,6 +593,37 @@ def refresh_tags():
     threading.Thread(target=_do, daemon=True).start()
     return {"ok": True}
 
+@app.get("/api/day-stats")
+def day_stats():
+    conn = db_conn()
+    today = "date('now','localtime')"
+    rows = conn.execute(
+        f"SELECT market_name, success, reason FROM bumps"
+        f" WHERE logged_at >= {today}"
+    ).fetchall()
+    conn.close()
+    total = len(rows)
+    ok    = sum(1 for r in rows if r[1])
+    # failed due to limit/cooldown (actual bump attempts that hit wall)
+    limit_fails = sum(1 for r in rows if not r[1] and r[2] and r[2].startswith("ліміт"))
+    # per market
+    by_market: dict[str, dict] = {}
+    for r in rows:
+        name = r[0] or "?"
+        if name not in by_market:
+            by_market[name] = {"ok": 0, "fail": 0}
+        if r[1]:
+            by_market[name]["ok"] += 1
+        else:
+            by_market[name]["fail"] += 1
+    return {
+        "total": total,
+        "ok": ok,
+        "fail": total - ok,
+        "limit_fails": limit_fails,
+        "by_market": [{"name": k, **v} for k, v in by_market.items()],
+    }
+
 @app.get("/api/market-status")
 def market_status():
     cfg = load_config()

@@ -153,6 +153,7 @@ tr:hover td{background:#1e1e1e}
   <div class="row" style="justify-content:flex-end">
     <button class="btn-s" onclick="loadMarketStatus()">🔄 Оновити</button>
   </div>
+  <div id="day-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px"></div>
   <div id="status-list" class="col"></div>
 </div>
 
@@ -286,8 +287,25 @@ async function loadCfg() {
   return CFG;
 }
 
+// ── day stats ─────────────────────────────────────────────────────────────────
+async function loadDayStats() {
+  try {
+    const s = await api('/api/day-stats');
+    const el = document.getElementById('day-stats');
+    if (!el) return;
+    const tile = (val, lbl, color) =>
+      `<div class="stat-tile"><div class="stat-val" style="color:${color}">${val}</div><div class="stat-lbl">${lbl}</div></div>`;
+    el.innerHTML =
+      tile(s.total,       'Спроб сьогодні',   'var(--text)') +
+      tile(s.ok,          '✅ Вдалих',         'var(--green)') +
+      tile(s.fail,        '⛔ Невдалих',        'var(--red)') +
+      tile(s.limit_fails, '🚫 Ліміт підняттів','var(--yellow)');
+  } catch(e) {}
+}
+
 // ── market status ─────────────────────────────────────────────────────────────
 async function loadMarketStatus() {
+  loadDayStats();
   try {
     const markets = await api('/api/market-status');
     const c = document.getElementById('status-list');
