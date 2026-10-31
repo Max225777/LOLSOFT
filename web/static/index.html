@@ -179,7 +179,8 @@ tr:hover td{background:#1e1e1e}
       <div id="tag-stats-header">
         <span>📦 Активні лоти по тегах</span>
         <div class="spacer"></div>
-        <span style="font-size:10px;color:var(--sub)" id="cd-hint">🕐 = на кулдауні</span>
+        <span style="font-size:10px;color:var(--sub)">🕐 = на кулдауні</span>
+        <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
       </div>
       <div id="tag-stats-body">
         <span style="color:var(--sub);font-size:11px;padding:10px">Завантаження…</span>
@@ -317,13 +318,18 @@ function buildStatusCard(m) {
   return div;
 }
 
-// ── tag chip order (localStorage) ────────────────────────────────────────────
-function getTagOrder() {
-  try { return JSON.parse(localStorage.getItem('tagOrder') || '[]'); } catch(_) { return []; }
+// ── tag chip order + hidden (localStorage) ────────────────────────────────────
+function getTagOrder()   { try { return JSON.parse(localStorage.getItem('tagOrder')  || '[]'); } catch(_) { return []; } }
+function saveTagOrder(o) { try { localStorage.setItem('tagOrder',  JSON.stringify(o)); } catch(_) {} }
+function getHidden()     { try { return JSON.parse(localStorage.getItem('tagHidden') || '[]'); } catch(_) { return []; } }
+function saveHidden(h)   { try { localStorage.setItem('tagHidden', JSON.stringify(h)); } catch(_) {} }
+
+function hideTag(tag) {
+  const h = getHidden();
+  if (!h.includes(tag)) { h.push(tag); saveHidden(h); }
+  renderTagChips();
 }
-function saveTagOrder(order) {
-  try { localStorage.setItem('tagOrder', JSON.stringify(order)); } catch(_) {}
-}
+
 function sortByOrder(data) {
   const order = getTagOrder();
   if (!order.length) return data;
@@ -342,8 +348,7 @@ let _lastTagData = [];
 async function loadTagStats() {
   try {
     const raw = await api('/api/cooldown-stats');
-    // hide tags with 0 total lots
-    _lastTagData = raw.filter(t => t.total > 0);
+    _lastTagData = raw;
     renderTagChips();
   } catch(e) { console.warn(e); }
 }
@@ -351,7 +356,8 @@ async function loadTagStats() {
 function renderTagChips() {
   const el = document.getElementById('tag-stats-body');
   if (!el) return;
-  const data = sortByOrder(_lastTagData);
+  const hidden = getHidden();
+  const data = sortByOrder(_lastTagData.filter(t => !hidden.includes(t.tag)));
   if (!data.length) {
     el.innerHTML = '<span style="color:var(--sub);font-size:11px;padding:10px">Кеш ще не завантажено</span>';
     return;
@@ -365,7 +371,10 @@ function renderTagChips() {
     const cdClass = t.cooldown > 0 ? '' : 'none';
     const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
     chip.innerHTML = `
-      <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
+        <button onclick="hideTag('${x(t.tag)}')" title="Приховати" style="background:none;border:none;color:#444;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
+      </div>
       <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
       <div class="tag-chip-cd ${cdClass}">${cdText}</div>`;
 
