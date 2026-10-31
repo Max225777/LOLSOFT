@@ -35,8 +35,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* tag stats */
 #tag-stats-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 #tag-stats-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px}
-#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;align-content:flex-start}
-.tag-chip-placeholder{border:2px dashed var(--accent);border-radius:6px;opacity:.4;background:transparent}
+#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-content:flex-start}
+.tag-chip-empty{border:2px dashed #2a2a2a;border-radius:6px;min-height:78px;transition:border-color .15s,background .15s}
+.tag-chip-empty.drag-over{border-color:var(--accent);background:#1a2a10}
 
 /* console */
 #console{flex-shrink:0;height:210px;background:#0d0d0d;border-top:1px solid var(--border);display:flex;flex-direction:column}
@@ -291,7 +292,7 @@ function buildStatusCard(m) {
     rows = m.listings.map((l, i) => {
       const mine = l.is_mine;
       const color = mine ? 'var(--green)' : '#666';
-      return `<tr>
+      return `<tr style="background:${mine?'#0d1f0d':'#1f0d0d'}">
         <td style="color:var(--sub);width:20px">${i+1}</td>
         <td style="max-width:180px"><a href="${x(l.link||'')}" target="_blank" style="color:${color}">${x(l.title||'')}</a></td>
         <td style="color:${color}">${x(l.seller||'')}</td>
@@ -319,9 +320,9 @@ function buildStatusCard(m) {
   return div;
 }
 
-// ── tag chip order + hidden (localStorage) ────────────────────────────────────
-function getTagOrder()   { try { return JSON.parse(localStorage.getItem('tagOrder')  || '[]'); } catch(_) { return []; } }
-function saveTagOrder(o) { try { localStorage.setItem('tagOrder',  JSON.stringify(o)); } catch(_) {} }
+// ── tag grid positions + hidden ────────────────────────────────────────────────
+const GRID_COLS = 4;
+
 function getHidden()     { try { return JSON.parse(localStorage.getItem('tagHidden') || '[]'); } catch(_) { return []; } }
 function saveHidden(h)   { try { localStorage.setItem('tagHidden', JSON.stringify(h)); } catch(_) {} }
 
@@ -331,17 +332,21 @@ function hideTag(tag) {
   renderTagChips();
 }
 
-function sortByOrder(data) {
-  const order = getTagOrder();
-  if (!order.length) return data;
-  return [...data].sort((a, b) => {
-    const ai = order.indexOf(a.tag), bi = order.indexOf(b.tag);
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+// positions: {tagName: cellIndex} — stored in CFG.tag_positions
+function getTagPositions() { return (CFG.tag_positions) || {}; }
+
+async function saveTagPositions(positions) {
+  CFG.tag_positions = positions;
+  try {
+    const patch = {...CFG};
+    delete patch.token;
+    delete patch._token_set;
+    await api('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
+  } catch(e) { console.warn('saveTagPositions:', e); }
 }
+
+// legacy — kept for compat
+function sortByOrder(data) { return data; }
 
 // ── tag cooldown stats (right top) ───────────────────────────────────────────
 let _lastTagData = [];
@@ -357,74 +362,112 @@ async function loadTagStats() {
 function renderTagChips() {
   const el = document.getElementById('tag-stats-body');
   if (!el) return;
+
   const hidden = getHidden();
-  const data = sortByOrder(_lastTagData.filter(t => !hidden.includes(t.tag)));
-  if (!data.length) {
+  const visible = _lastTagData.filter(t => !hidden.includes(t.tag));
+
+  if (!visible.length) {
     el.innerHTML = '<span style="color:var(--sub);font-size:11px;padding:10px">Кеш ще не завантажено</span>';
+    el.style.display = 'flex';
     return;
   }
-  el.innerHTML = '';
-  data.forEach(t => {
-    const chip = document.createElement('div');
-    chip.className = 'tag-chip';
-    chip.draggable = true;
-    chip.dataset.tag = t.tag;
-    const cdClass = t.cooldown > 0 ? '' : 'none';
-    const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
-    chip.innerHTML = `
-      <div style="display:flex;align-items:center;gap:4px">
-        <span style="color:#333;font-size:13px;cursor:grab;flex-shrink:0;line-height:1" title="Перетягнути">⠿</span>
-        <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
-        <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" title="Приховати" style="background:none;border:none;color:#333;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#333'">✕</button>
-      </div>
-      <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
-      <div class="tag-chip-cd ${cdClass}">${cdText}</div>`;
+  el.style.display = 'grid';
 
-    // drag & drop with placeholder
-    chip.addEventListener('dragstart', e => {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', t.tag);
-      setTimeout(() => chip.classList.add('dragging'), 0);
-    });
-    chip.addEventListener('dragend', () => {
-      chip.classList.remove('dragging');
-      document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
-    });
-    chip.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      // show placeholder before this chip if not already there
-      const ph = document.querySelector('.tag-chip-placeholder');
-      if (!ph || ph.nextSibling !== chip) {
-        document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
-        const placeholder = document.createElement('div');
-        placeholder.className = 'tag-chip-placeholder';
-        placeholder.style.minHeight = chip.offsetHeight + 'px';
-        el.insertBefore(placeholder, chip);
-      }
-    });
-    chip.addEventListener('dragleave', e => {
-      if (!chip.contains(e.relatedTarget)) {
-        // keep placeholder — it'll be cleaned up on drop or dragend
-      }
-    });
-    chip.addEventListener('drop', e => {
-      e.preventDefault();
-      document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
-      const fromTag = e.dataTransfer.getData('text/plain');
-      if (fromTag === t.tag) return;
-      const sorted = sortByOrder(_lastTagData.filter(d => !getHidden().includes(d.tag)));
-      const fromIdx = sorted.findIndex(d => d.tag === fromTag);
-      const toIdx   = sorted.findIndex(d => d.tag === t.tag);
-      if (fromIdx === -1 || toIdx === -1) return;
-      const [moved] = sorted.splice(fromIdx, 1);
-      sorted.splice(toIdx, 0, moved);
-      saveTagOrder(sorted.map(d => d.tag));
-      renderTagChips();
-    });
+  const positions = getTagPositions(); // {tag: cellIndex}
 
-    el.appendChild(chip);
+  // Build cell map: cellIndex → tagData
+  const cellMap = {};
+  const unplaced = [];
+  visible.forEach(t => {
+    const pos = positions[t.tag];
+    if (pos !== undefined) cellMap[pos] = t;
+    else unplaced.push(t);
   });
+
+  // Total cells = at least cover all tags + a row of empty slack
+  const maxOccupied = Object.keys(cellMap).length ? Math.max(...Object.keys(cellMap).map(Number)) : -1;
+  const minCells = Math.max(visible.length + GRID_COLS, maxOccupied + GRID_COLS + 1);
+  const totalCells = Math.ceil(minCells / GRID_COLS) * GRID_COLS;
+
+  // Place unplaced tags into first free cells
+  let fillPtr = 0;
+  for (const t of unplaced) {
+    while (cellMap[fillPtr] !== undefined) fillPtr++;
+    cellMap[fillPtr] = t;
+    positions[t.tag] = fillPtr;
+    fillPtr++;
+  }
+
+  el.innerHTML = '';
+
+  for (let i = 0; i < totalCells; i++) {
+    const t = cellMap[i];
+    if (t) {
+      const chip = document.createElement('div');
+      chip.className = 'tag-chip';
+      chip.draggable = true;
+      chip.dataset.tag = t.tag;
+      chip.dataset.cell = i;
+      const cdClass = t.cooldown > 0 ? '' : 'none';
+      const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
+      chip.innerHTML = `
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="color:#333;font-size:13px;cursor:grab;flex-shrink:0;line-height:1">⠿</span>
+          <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
+          <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="background:none;border:none;color:#333;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#333'">✕</button>
+        </div>
+        <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
+        <div class="tag-chip-cd ${cdClass}">${cdText}</div>`;
+
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i));
+        setTimeout(() => chip.classList.add('dragging'), 0);
+      });
+      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+      chip.addEventListener('dragover', e => { e.preventDefault(); chip.classList.add('drag-over'); });
+      chip.addEventListener('dragleave', e => { if (!chip.contains(e.relatedTarget)) chip.classList.remove('drag-over'); });
+      chip.addEventListener('drop', e => {
+        e.preventDefault(); chip.classList.remove('drag-over');
+        _dropToCell(e, i);
+      });
+      el.appendChild(chip);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'tag-chip-empty';
+      empty.dataset.cell = i;
+      empty.addEventListener('dragover', e => { e.preventDefault(); empty.classList.add('drag-over'); });
+      empty.addEventListener('dragleave', e => { if (!empty.contains(e.relatedTarget)) empty.classList.remove('drag-over'); });
+      empty.addEventListener('drop', e => {
+        e.preventDefault(); empty.classList.remove('drag-over');
+        _dropToCell(e, i);
+      });
+      el.appendChild(empty);
+    }
+  }
+}
+
+function _dropToCell(e, toCell) {
+  const fromCell = parseInt(e.dataTransfer.getData('text/plain'));
+  if (isNaN(fromCell) || fromCell === toCell) return;
+
+  const pos = getTagPositions();
+  // find tags at fromCell and toCell
+  const fromTag = Object.keys(pos).find(tag => pos[tag] === fromCell);
+  const toTag   = Object.keys(pos).find(tag => pos[tag] === toCell);
+  if (!fromTag) return;
+
+  if (toTag) {
+    // swap
+    pos[fromTag] = toCell;
+    pos[toTag]   = fromCell;
+  } else {
+    // move to empty
+    pos[fromTag] = toCell;
+  }
+
+  saveTagPositions(pos);
+  renderTagChips();
 }
 
 // ── overlay (Markets / Schedule / Settings) ───────────────────────────────────
