@@ -27,7 +27,6 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 
 /* ── left panel ── */
 #left-panel{width:50%;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
-#left-panel-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:10}
 #left-panel-body{flex:1;overflow-y:auto;padding:10px}
 
 /* ── right panel ── */
@@ -157,17 +156,13 @@ tr:hover td{background:#1e1e1e}
   <div id="left-panel">
     <div id="topbar">
       <h1>LOLSOFT</h1>
-      <span class="sub">Auto-Bumper</span>
       <div id="ws-dot" title="WebSocket"></div>
       <div class="spacer"></div>
-      <div onclick="openOverlay('markets')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🏪</div>
-      <div onclick="openOverlay('schedule')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🕐</div>
-      <div onclick="openOverlay('settings')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">⚙</div>
-    </div>
-    <div id="left-panel-header">
-      <span>📡 Ринки — Топ лоти</span>
-      <div class="spacer"></div>
-      <button class="btn-s" onclick="loadMarketStatus()" style="padding:2px 8px;font-size:10px">🔄</button>
+      <span style="font-size:10px;color:var(--sub)">📡 Ринки</span>
+      <button class="btn-s" onclick="loadMarketStatus()" style="padding:2px 7px;font-size:10px">🔄</button>
+      <div onclick="openOverlay('markets')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🏪 Ринки</div>
+      <div onclick="openOverlay('schedule')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🕐</div>
+      <div onclick="openOverlay('settings')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">⚙</div>
     </div>
     <div id="left-panel-body">
       <div id="day-stats" class="stat-grid"></div>
