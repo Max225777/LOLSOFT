@@ -372,8 +372,9 @@ function renderTagChips() {
     const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
     chip.innerHTML = `
       <div style="display:flex;align-items:center;gap:4px">
+        <span style="color:#333;font-size:13px;cursor:grab;flex-shrink:0;line-height:1" title="Перетягнути">⠿</span>
         <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
-        <button onclick="hideTag('${x(t.tag)}')" title="Приховати" style="background:none;border:none;color:#444;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
+        <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" title="Приховати" style="background:none;border:none;color:#333;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#333'">✕</button>
       </div>
       <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
       <div class="tag-chip-cd ${cdClass}">${cdText}</div>`;
