@@ -35,21 +35,32 @@ API_BASE      = "https://prod-api.lzt.market"
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 def load_config() -> dict:
+    # 1. try CONFIG_JSON env var (persists across Render redeploys)
+    env_json = os.environ.get("CONFIG_JSON", "")
+    env_cfg: dict = {}
+    if env_json:
+        try:
+            env_cfg = json.loads(env_json)
+        except Exception:
+            pass
+
+    # 2. try local file (written by save_config during session)
+    file_cfg: dict = {}
     try:
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        file_cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
-        cfg = {}
-    # fallback: full config from CONFIG_JSON env var (survives Render redeploys)
-    if not cfg:
-        env_json = os.environ.get("CONFIG_JSON", "")
-        if env_json:
-            try:
-                cfg = json.loads(env_json)
-            except Exception:
-                pass
-    if not cfg:
-        cfg = {"token": "", "interval": 60, "autorefresh": False,
-               "autobump": False, "markets": []}
+        pass
+
+    # prefer file if it has markets (user saved during this session),
+    # otherwise fall back to env var, otherwise defaults
+    if file_cfg.get("markets"):
+        cfg = file_cfg
+    elif env_cfg:
+        cfg = env_cfg
+    else:
+        cfg = file_cfg or {"token": "", "autorefresh": False,
+                           "autobump": False, "markets": []}
+
     if not cfg.get("token"):
         cfg["token"] = os.environ.get("LOLZ_TOKEN", "")
     return cfg
