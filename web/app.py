@@ -23,9 +23,11 @@ from pydantic import BaseModel
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
-CONFIG_PATH = BASE_DIR / "lolsoft_config.json"
-DB_PATH     = BASE_DIR / "lolsoft_stats.db"
 STATIC_DIR  = BASE_DIR / "static"
+# If /data is mounted (Render Persistent Disk), store mutable files there
+_DATA_DIR   = Path(os.environ.get("DATA_DIR", str(BASE_DIR)))
+CONFIG_PATH = _DATA_DIR / "lolsoft_config.json"
+DB_PATH     = _DATA_DIR / "lolsoft_stats.db"
 
 MY_PROFILE_ID = "9542364"
 API_BASE      = "https://prod-api.lzt.market"
