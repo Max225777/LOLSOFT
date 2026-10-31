@@ -191,14 +191,9 @@ tr:hover td{background:#1e1e1e}
 <div class="pane" id="pane-settings">
   <div class="card">
     <div class="card-hd">API Токен</div>
-    <div class="row">
-      <div class="tok-wrap">
-        <input type="password" id="inp-token" placeholder="Bearer токен з lzt.market/account/api"/>
-        <button class="eye" onclick="toggleTok()">👁</button>
-      </div>
-      <a href="https://lzt.market/account/api" target="_blank" class="btn-s">Де взяти?</a>
+    <div style="font-size:12px;color:var(--sub)" id="tok-hint">
+      Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render.
     </div>
-    <div style="font-size:11px;color:var(--sub);margin-top:6px" id="tok-hint"></div>
   </div>
 
   <div class="card">
@@ -596,47 +591,31 @@ async function populateSettings() {
   await loadAvailableTags();
   await loadCacheStatus();
   const hint = document.getElementById('tok-hint');
-  if (CFG._token_set) {
-    document.getElementById('inp-token').value = '';
-    document.getElementById('inp-token').placeholder = '••• токен збережено, введіть новий щоб змінити •••';
-    hint.textContent = '⚠ Токен вже збережено на сервері. Поле порожнє = залишити поточний.';
-  } else {
-    hint.textContent = 'Токен не встановлено.';
-  }
+  if (hint) hint.innerHTML = CFG._token_set
+    ? 'Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render — <span style="color:var(--green)">✅ встановлено</span>'
+    : 'Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render — <span style="color:var(--red)">⛔ не встановлено</span>';
   document.getElementById('chk-ar').checked = !!CFG.autorefresh;
   document.getElementById('chk-ab').checked = !!CFG.autobump;
 }
 
-function toggleTok() {
-  const i = document.getElementById('inp-token');
-  i.type = i.type==='password'?'text':'password';
-}
-
 // ── save all ──────────────────────────────────────────────────────────────────
 async function saveAll() {
-  // collect markets from DOM if markets pane is open
-  const mktPane = document.getElementById('pane-markets');
-  let markets;
-  if (mktPane.classList.contains('active') || document.querySelectorAll('.mkt-card').length) {
-    markets = collectMarkets();
-  } else {
-    markets = marketsLocal;
-  }
+  // always use DOM cards if rendered, else fall back to marketsLocal
+  const domCards = document.querySelectorAll('.mkt-card');
+  const markets = domCards.length ? collectMarkets() : marketsLocal;
 
-  const tokenVal = document.getElementById('inp-token').value.trim();
   const patch = {
     ...CFG,
     autorefresh: document.getElementById('chk-ar').checked,
     autobump:    document.getElementById('chk-ab').checked,
     markets,
   };
-  if (tokenVal) patch.token = tokenVal;
+  delete patch.token; // token always from LOLZ_TOKEN env var
 
   try {
     await api('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
     toast('✅ Збережено');
     document.getElementById('save-hint').textContent = 'Збережено: '+new Date().toLocaleTimeString();
-    document.getElementById('inp-token').value = '';
     await loadCfg();
     if (document.getElementById('pane-schedule').classList.contains('active')) renderSchedule();
   } catch(e) { toast('⛔ '+e.message, false); }
