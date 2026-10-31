@@ -322,17 +322,22 @@ function buildStatusCard(m) {
   const statusColor = !m.enabled ? 'var(--red)' : m.active ? 'var(--green)' : 'var(--yellow)';
 
   let rows = '';
-  if (m.recent.length) {
-    rows = m.recent.map(r => `
-      <tr>
-        <td style="font-size:10px;color:var(--sub);white-space:nowrap">${r.logged_at.slice(11,19)}</td>
-        <td style="color:${r.success?'var(--green)':'var(--red)'};font-size:13px;text-align:center">${r.success?'✅':'⛔'}</td>
-        <td style="color:var(--sub);font-size:11px">${x(r.tag||'')}</td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x(r.item_title||'')}">${x(r.item_title||r.item_id||'')}</td>
-        <td style="font-size:10px;color:var(--sub)">${x(r.reason||'')}</td>
-      </tr>`).join('');
+  if (m.listings && m.listings.length) {
+    rows = m.listings.map((l, i) => {
+      const mine = l.is_mine;
+      const color = mine ? 'var(--green)' : 'var(--red)';
+      return `<tr style="background:${mine ? '#0d1f0d' : '#1f0d0d'}">
+        <td style="color:var(--sub);font-size:11px;text-align:center">${i+1}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <a href="${x(l.link||'')}" target="_blank" style="color:${color}">${x(l.title||'')}</a>
+        </td>
+        <td style="color:${color};font-size:11px">${x(l.seller||'')}</td>
+        <td style="color:var(--sub);font-size:11px">${x(l.price||'')}</td>
+        <td style="font-size:10px;color:var(--sub)">${l.bumped_at||''}</td>
+      </tr>`;
+    }).join('');
   } else {
-    rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:10px">Ще немає підняттів</td></tr>';
+    rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:10px">Немає даних</td></tr>';
   }
 
   div.innerHTML = `
@@ -345,9 +350,13 @@ function buildStatusCard(m) {
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Час</th><th>✓</th><th>Тег</th><th>Лот</th><th>Причина</th></tr></thead>
+        <thead><tr><th>#</th><th>Лот</th><th>Продавець</th><th>Ціна</th><th>Піднято</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+    </div>
+    <div style="font-size:10px;color:var(--sub);margin-top:6px">
+      <span style="color:var(--green)">■</span> мій лот &nbsp;
+      <span style="color:var(--red)">■</span> чужий
     </div>`;
   return div;
 }
