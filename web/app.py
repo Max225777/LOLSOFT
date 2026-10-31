@@ -525,10 +525,12 @@ def get_config():
 def set_config(body: ConfigIn):
     cfg = body.data
     old = load_config()
-    # keep token: if not provided or masked, use existing (file or env var)
     tok = cfg.get("token", "")
     if not tok or "…" in tok or tok == "****":
         cfg["token"] = old.get("token", "") or os.environ.get("LOLZ_TOKEN", "")
+    # always on
+    cfg["autobump"] = True
+    cfg["autorefresh"] = True
     save_config(cfg)
     sched_mgr.reload(cfg)
     broadcaster.emit("⚙ Налаштування збережено", "info")
