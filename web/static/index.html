@@ -35,7 +35,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* tag stats */
 #tag-stats-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 #tag-stats-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px}
-#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;align-content:flex-start}
+.tag-chip-placeholder{border:2px dashed var(--accent);border-radius:6px;opacity:.4;background:transparent}
 
 /* console */
 #console{flex-shrink:0;height:210px;background:#0d0d0d;border-top:1px solid var(--border);display:flex;flex-direction:column}
@@ -379,28 +380,46 @@ function renderTagChips() {
       <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
       <div class="tag-chip-cd ${cdClass}">${cdText}</div>`;
 
-    // drag & drop
+    // drag & drop with placeholder
     chip.addEventListener('dragstart', e => {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', t.tag);
-      chip.classList.add('dragging');
+      setTimeout(() => chip.classList.add('dragging'), 0);
     });
-    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-    chip.addEventListener('dragover', e => { e.preventDefault(); chip.classList.add('drag-over'); });
-    chip.addEventListener('dragleave', () => chip.classList.remove('drag-over'));
+    chip.addEventListener('dragend', () => {
+      chip.classList.remove('dragging');
+      document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
+    });
+    chip.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // show placeholder before this chip if not already there
+      const ph = document.querySelector('.tag-chip-placeholder');
+      if (!ph || ph.nextSibling !== chip) {
+        document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
+        const placeholder = document.createElement('div');
+        placeholder.className = 'tag-chip-placeholder';
+        placeholder.style.minHeight = chip.offsetHeight + 'px';
+        el.insertBefore(placeholder, chip);
+      }
+    });
+    chip.addEventListener('dragleave', e => {
+      if (!chip.contains(e.relatedTarget)) {
+        // keep placeholder — it'll be cleaned up on drop or dragend
+      }
+    });
     chip.addEventListener('drop', e => {
       e.preventDefault();
-      chip.classList.remove('drag-over');
+      document.querySelectorAll('.tag-chip-placeholder').forEach(p => p.remove());
       const fromTag = e.dataTransfer.getData('text/plain');
       if (fromTag === t.tag) return;
-      // reorder _lastTagData
-      const sorted = sortByOrder(_lastTagData);
-      const fromIdx = sorted.findIndex(x => x.tag === fromTag);
-      const toIdx   = sorted.findIndex(x => x.tag === t.tag);
+      const sorted = sortByOrder(_lastTagData.filter(d => !getHidden().includes(d.tag)));
+      const fromIdx = sorted.findIndex(d => d.tag === fromTag);
+      const toIdx   = sorted.findIndex(d => d.tag === t.tag);
       if (fromIdx === -1 || toIdx === -1) return;
       const [moved] = sorted.splice(fromIdx, 1);
       sorted.splice(toIdx, 0, moved);
-      saveTagOrder(sorted.map(x => x.tag));
+      saveTagOrder(sorted.map(d => d.tag));
       renderTagChips();
     });
 
