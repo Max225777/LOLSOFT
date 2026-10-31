@@ -590,6 +590,31 @@ def refresh_tags():
     threading.Thread(target=_do, daemon=True).start()
     return {"ok": True}
 
+@app.get("/api/market-status")
+def market_status():
+    cfg = load_config()
+    conn = db_conn()
+    result = []
+    for mkt in cfg.get("markets", []):
+        name = mkt.get("name", "")
+        rows = conn.execute(
+            "SELECT tag, item_id, item_title, success, reason, logged_at"
+            " FROM bumps WHERE market_name=? ORDER BY logged_at DESC LIMIT 10",
+            (name,)
+        ).fetchall()
+        engine = sched_mgr._engines.get(name)
+        result.append({
+            "name": name,
+            "enabled": mkt.get("enabled", True),
+            "active": engine is not None,
+            "work_from": mkt.get("work_from", ""),
+            "work_to": mkt.get("work_to", ""),
+            "recent": [{"tag":r[0],"item_id":r[1],"item_title":r[2],
+                        "success":bool(r[3]),"reason":r[4],"logged_at":r[5]} for r in rows],
+        })
+    conn.close()
+    return result
+
 @app.post("/api/bump-now/{market_name}")
 def bump_now(market_name: str):
     engine = sched_mgr._engines.get(market_name)

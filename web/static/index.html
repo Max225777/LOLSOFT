@@ -140,7 +140,7 @@ tr:hover td{background:#1e1e1e}
 
 <datalist id="tags-datalist"></datalist>
 <div id="nav">
-  <div class="tab active" data-tab="dash">📊 Дашборд</div>
+  <div class="tab active" data-tab="status">📡 Статус</div>
   <div class="tab" data-tab="markets">🏪 Ринки</div>
   <div class="tab" data-tab="schedule">🕐 Розклад</div>
   <div class="tab" data-tab="settings">⚙ Налаштування</div>
@@ -148,42 +148,12 @@ tr:hover td{background:#1e1e1e}
 
 <div id="content">
 
-<!-- ── DASHBOARD ─────────────────────────────────────────────────────────── -->
-<div class="pane active" id="pane-dash">
-  <div class="stat-grid" id="stat-grid">
-    <div class="stat-tile"><div class="stat-val" id="s-all">—</div><div class="stat-lbl">Всього спроб</div></div>
-    <div class="stat-tile"><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Сьогодні</div></div>
-    <div class="stat-tile"><div class="stat-val" id="s-ok" style="color:var(--green)">—</div><div class="stat-lbl">✅ Успішних</div></div>
-    <div class="stat-tile"><div class="stat-val" id="s-fail" style="color:var(--red)">—</div><div class="stat-lbl">⛔ Невдалих</div></div>
+<!-- ── STATUS ────────────────────────────────────────────────────────────── -->
+<div class="pane active" id="pane-status">
+  <div class="row" style="justify-content:flex-end">
+    <button class="btn-s" onclick="loadMarketStatus()">🔄 Оновити</button>
   </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <div class="card-hd" style="margin-bottom:0">Підняття сьогодні по годинах — кожна клітинка = одне підняття в реальному порядку</div>
-      <span style="font-size:11px;color:var(--sub)"><span style="color:var(--green)">■</span> успішне &nbsp;<span style="color:var(--red)">■</span> невдале</span>
-    </div>
-    <div id="bump-grid" style="display:flex;gap:4px;align-items:flex-start;overflow-x:auto;padding-bottom:4px"></div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div class="card-hd" style="margin-bottom:0">Лог підняттів сьогодні</div>
-      <div class="spacer"></div>
-      <label style="display:flex;align-items:center;gap:4px">
-        <input type="checkbox" id="flt-ok" checked onchange="renderBumpLog()"/> <span style="color:var(--green)">✅ Успішні</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:4px">
-        <input type="checkbox" id="flt-fail" checked onchange="renderBumpLog()"/> <span style="color:var(--red)">⛔ Невдалі</span>
-      </label>
-      <button class="btn-s" onclick="loadBumpLog()">🔄</button>
-    </div>
-    <div class="tbl-wrap" style="max-height:260px;overflow-y:auto">
-      <table>
-        <thead><tr><th>Час</th><th>Ринок</th><th>Тег</th><th>Лот</th><th>Результат</th><th>Причина</th></tr></thead>
-        <tbody id="bump-log-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:14px">Завантаження…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
+  <div id="status-list" class="col"></div>
 </div>
 
 <!-- ── MARKETS ────────────────────────────────────────────────────────────── -->
@@ -296,7 +266,7 @@ document.querySelectorAll('.tab').forEach(t => {
     document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('pane-'+t.dataset.tab).classList.add('active');
-    if (t.dataset.tab==='dash')     loadStats();
+    if (t.dataset.tab==='status')   loadMarketStatus();
     if (t.dataset.tab==='markets')  renderMarkets();
     if (t.dataset.tab==='schedule') renderSchedule();
     if (t.dataset.tab==='settings') populateSettings();
@@ -327,59 +297,59 @@ async function loadCfg() {
   return CFG;
 }
 
-// ── stats ─────────────────────────────────────────────────────────────────────
-async function loadStats() {
+// ── market status ─────────────────────────────────────────────────────────────
+async function loadMarketStatus() {
   try {
-    const s = await api('/api/stats');
-    document.getElementById('s-all').textContent   = s.total_all;
-    document.getElementById('s-today').textContent = s.total_today;
-    document.getElementById('s-ok').textContent    = s.ok_today;
-    document.getElementById('s-fail').textContent  = s.fail_today;
+    const markets = await api('/api/market-status');
+    const c = document.getElementById('status-list');
+    c.innerHTML = '';
+    if (!markets.length) {
+      c.innerHTML = '<div style="color:var(--sub);padding:20px">Ринків немає — додайте їх у вкладці Ринки</div>';
+      return;
+    }
+    markets.forEach(m => c.appendChild(buildStatusCard(m)));
   } catch(e) { console.warn(e); }
 }
 
-// ── bump grid (chronological per-hour) ───────────────────────────────────────
-function renderBumpGrid(rows) {
-  const grid = document.getElementById('bump-grid');
-  if (!grid) return;
+function buildStatusCard(m) {
+  const on = m.enabled && m.active;
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.style.borderLeft = `3px solid ${on ? 'var(--green)' : (m.enabled ? 'var(--yellow)' : 'var(--border)')}`;
 
-  // group by hour 0..23
-  const byHour = {};
-  for (let h = 0; h < 24; h++) byHour[h] = [];
-  rows.forEach(r => {
-    const h = parseInt((r.logged_at||'').slice(11,13)) || 0;
-    byHour[h].push(r);
-  });
+  const hours = m.work_from && m.work_to ? `${m.work_from} — ${m.work_to}` : 'цілодобово';
+  const statusText = !m.enabled ? 'ВИМКНЕНО' : m.active ? 'АКТИВНИЙ' : 'очікування';
+  const statusColor = !m.enabled ? 'var(--red)' : m.active ? 'var(--green)' : 'var(--yellow)';
 
-  grid.innerHTML = '';
-  for (let h = 0; h < 24; h++) {
-    const items = byHour[h]; // already sorted oldest→newest from API
-    const col = document.createElement('div');
-    col.className = 'bump-col';
-
-    // cells top→bottom = chronological order
-    items.forEach(r => {
-      const cell = document.createElement('div');
-      cell.className = 'bump-cell';
-      cell.style.background = r.success ? '#4caf50' : '#ff5252';
-      const tip = `${r.logged_at.slice(11,19)} [${r.market_name||''}][${r.tag||''}]\n${r.item_title||r.item_id||''}\n${r.success?'✅ Успішно':'⛔ '+r.reason}`;
-      cell.title = tip;
-      col.appendChild(cell);
-    });
-
-    // empty hour — small placeholder dot
-    if (!items.length) {
-      const dot = document.createElement('div');
-      dot.style.cssText = 'width:20px;height:3px;background:var(--border);border-radius:2px';
-      col.appendChild(dot);
-    }
-
-    const lbl = document.createElement('div');
-    lbl.className = 'bump-col-lbl';
-    lbl.textContent = String(h).padStart(2,'0');
-    col.appendChild(lbl);
-    grid.appendChild(col);
+  let rows = '';
+  if (m.recent.length) {
+    rows = m.recent.map(r => `
+      <tr>
+        <td style="font-size:10px;color:var(--sub);white-space:nowrap">${r.logged_at.slice(11,19)}</td>
+        <td style="color:${r.success?'var(--green)':'var(--red)'};font-size:13px;text-align:center">${r.success?'✅':'⛔'}</td>
+        <td style="color:var(--sub);font-size:11px">${x(r.tag||'')}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x(r.item_title||'')}">${x(r.item_title||r.item_id||'')}</td>
+        <td style="font-size:10px;color:var(--sub)">${x(r.reason||'')}</td>
+      </tr>`).join('');
+  } else {
+    rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:10px">Ще немає підняттів</td></tr>';
   }
+
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700">${x(m.name)}</span>
+      <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusText}</span>
+      <span style="font-size:11px;color:var(--sub)">${hours}</span>
+      <div class="spacer"></div>
+      <button class="btn-s" onclick="bumpNow('${x(m.name)}')">⚡ Підняти</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Час</th><th>✓</th><th>Тег</th><th>Лот</th><th>Причина</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return div;
 }
 
 // ── available tags cache ──────────────────────────────────────────────────────
@@ -742,45 +712,12 @@ function _paintConsole() {
 
 function clearLogs() { logLines=[]; _paintConsole(); }
 
-// ── bump log table ────────────────────────────────────────────────────────────
-let bumpLogData = [];
-
-async function loadBumpLog() {
-  try {
-    bumpLogData = await api('/api/bump-log');
-    renderBumpGrid(bumpLogData.slice().reverse()); // oldest first for grid
-    renderBumpLog();
-  } catch(e) { console.warn(e); }
-}
-
-function renderBumpLog() {
-  const showOk   = document.getElementById('flt-ok').checked;
-  const showFail = document.getElementById('flt-fail').checked;
-  const tb = document.getElementById('bump-log-body');
-  const rows = bumpLogData.filter(r => r.success ? showOk : showFail);
-  if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="color:var(--sub);text-align:center;padding:14px">Немає записів</td></tr>';
-    return;
-  }
-  tb.innerHTML = rows.map(r => `
-    <tr>
-      <td style="color:var(--sub);font-size:10px;white-space:nowrap">${r.logged_at.slice(11,19)}</td>
-      <td>${x(r.market_name||'')}</td>
-      <td>${x(r.tag||'')}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x(r.item_title||'')}">${x(r.item_title||r.item_id||'')}</td>
-      <td style="color:${r.success?'var(--green)':'var(--red)'};font-weight:600">${r.success?'✅':'⛔'}</td>
-      <td style="font-size:11px;color:var(--sub)">${x(r.reason||'')}</td>
-    </tr>`).join('');
-}
-
 // ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
   connectWS();
   await loadCfg();
-  await loadStats();
-  await loadBumpLog();
-  setInterval(loadStats, 30000);
-  setInterval(loadBumpLog, 60000);
+  await loadMarketStatus();
+  setInterval(loadMarketStatus, 15000);
 })();
 </script>
 </body>
