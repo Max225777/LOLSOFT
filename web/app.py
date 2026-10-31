@@ -310,19 +310,10 @@ class MarketEngine:
     def __init__(self, cfg: dict, token_fn):
         self.cfg          = cfg
         self.token_fn     = token_fn  # callable → str
-        self._bump_idx:  dict[str, int]   = {}
-        self._cooldowns: dict[str, float] = {}  # item_id → expires_at (time.time())
-        self._queue_pos: int = 0  # position in weighted tag queue
-
-    def _build_queue(self) -> list[str]:
-        """Weighted queue: each tag repeated count times. e.g. Новореги×3 + 2года×2."""
-        queue = []
-        for tag_cfg in self.cfg.get("tags", []):
-            tag   = tag_cfg.get("tag", "").strip()
-            count = max(1, tag_cfg.get("count", 1))
-            if tag:
-                queue.extend([tag] * count)
-        return queue
+        self._bump_idx:  dict[str, int]   = {}   # tag → next item index
+        self._cooldowns: dict[str, float] = {}   # item_id → expires_at
+        self._cycle_tag_idx: int = 0             # current tag index in active_tags
+        self._cycle_done:    int = 0             # bumps done for current tag this cycle
 
     def get_token(self) -> str:
         return self.token_fn()
@@ -361,55 +352,54 @@ class MarketEngine:
             broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
             return
 
-        token  = self.get_token()
+        token = self.get_token()
         if not token:
             return
-        name   = self.cfg.get("name", "?")
-        url    = self.cfg.get("url", "")
-        top_n  = self.cfg.get("top_n", 1)
-        tags   = self.cfg.get("tags", [])
+        name  = self.cfg.get("name", "?")
+        url   = self.cfg.get("url", "")
+        top_n = self.cfg.get("top_n", 1)
 
-        # smart bump: check if already in top-N
+        # Build active tag list: [(tag, count), ...]
+        active_tags = [
+            (t.get("tag", "").strip(), max(1, t.get("count", 1)))
+            for t in self.cfg.get("tags", [])
+            if t.get("tag", "").strip()
+        ]
+        if not active_tags:
+            broadcaster.emit(f"⚠ [{name}] немає тегів", "warn")
+            return
+
+        # Guard cycle index
+        if self._cycle_tag_idx >= len(active_tags):
+            self._cycle_tag_idx = 0
+            self._cycle_done    = 0
+
+        tag, bumps_needed = active_tags[self._cycle_tag_idx]
+
+        # Skip tags with no items in cache — advance cycle and return
+        my_items = items_for_tag(tag)
+        if not my_items:
+            broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено, пропуск тегу", "warn")
+            self._advance_cycle(active_tags, force=True)
+            return
+
+        # Check if already in top-N — advance cycle and skip
         if url and top_n > 0:
             try:
-                listings = fetch_listings(url, token, top_n)
-                top_ids  = {lot["id"] for lot in listings[:top_n]}
-                my_cache_ids = set()
-                for t in tags:
-                    for it in items_for_tag(t.get("tag", "")):
-                        my_cache_ids.add(str(it.get("item_id", "")))
-                if top_ids & my_cache_ids:
-                    broadcaster.emit(f"✅ [{name}] вже в топ-{top_n}, пропуск", "ok")
+                listings     = fetch_listings(url, token, top_n)
+                top_ids      = {lot["id"] for lot in listings[:top_n]}
+                my_ids       = {str(it.get("item_id", "")) for it in my_items}
+                if top_ids & my_ids:
+                    broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
+                    self._advance_cycle(active_tags)
                     return
             except Exception:
                 pass
 
-        # Weighted queue: 1 bump per tick, position advances each tick
-        queue = self._build_queue()
-        if not queue:
-            broadcaster.emit(f"⚠ [{name}] немає тегів у черзі", "warn")
-            return
-
-        now = time.time()
-
-        # Find next tag in queue that has items; skip empty tags
-        tag      = None
-        my_items = []
-        for _ in range(len(queue)):
-            candidate = queue[self._queue_pos % len(queue)]
-            self._queue_pos = (self._queue_pos + 1) % len(queue)
-            items = items_for_tag(candidate)
-            if items:
-                tag      = candidate
-                my_items = items
-                break
-
-        if not tag:
-            broadcaster.emit(f"⚠ [{name}] немає лотів в жодному тезі", "warn")
-            return
-
+        now       = time.time()
         total     = len(my_items)
         start_idx = self._bump_idx.get(tag, 0) % total
+        bumped    = False
 
         for attempt in range(max(total, 10)):
             idx = (start_idx + attempt) % total
@@ -424,12 +414,12 @@ class MarketEngine:
 
             if ok:
                 self._bump_idx[tag] = (idx + 1) % total
-                broadcaster.emit(f"✅ [{name}][{tag}] {title}", "ok")
+                broadcaster.emit(f"✅ [{name}][{tag}] {title}  ({self._cycle_done+1}/{bumps_needed})", "ok")
                 record_bump(name, tag, iid, title, True, "")
-                return
+                bumped = True
+                break
 
             elif reason.startswith("продано/видалено"):
-                # don't remove from cache — item may be relisted; recheck after 1h
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                 record_bump(name, tag, iid, title, False, reason)
                 broadcaster.emit(f"🗑 [{name}][{tag}] {title} — не знайдено, перевіримо через 1 год", "warn")
@@ -448,8 +438,18 @@ class MarketEngine:
                 record_bump(name, tag, iid, title, False, reason)
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
 
-        avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
-        broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({avail} доступних із {total})", "warn")
+        if not bumped:
+            avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
+            broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({avail}/{total} доступних)", "warn")
+
+        self._advance_cycle(active_tags)
+
+    def _advance_cycle(self, active_tags: list, force: bool = False):
+        _, needed = active_tags[self._cycle_tag_idx]
+        self._cycle_done += 1
+        if force or self._cycle_done >= needed:
+            self._cycle_tag_idx = (self._cycle_tag_idx + 1) % len(active_tags)
+            self._cycle_done    = 0
 
 # ─── Scheduler manager ────────────────────────────────────────────────────────
 
