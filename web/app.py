@@ -692,6 +692,22 @@ def market_status():
         })
     return result
 
+@app.get("/api/cooldown-stats")
+def get_cooldown_stats():
+    now = time.time()
+    result = []
+    for tag, items in _tag_items_cache.items():
+        total = len(items)
+        item_ids = {str(it.get("item_id", "")) for it in items}
+        on_cd = 0
+        for engine in sched_mgr._engines.values():
+            for iid in item_ids:
+                if engine._cooldowns.get(iid, 0) > now:
+                    on_cd += 1
+            break  # same items across all engines, count once
+        result.append({"tag": tag, "total": total, "cooldown": on_cd})
+    return sorted(result, key=lambda r: r["tag"])
+
 @app.post("/api/bump-now/{market_name}")
 def bump_now(market_name: str):
     engine = sched_mgr._engines.get(market_name)

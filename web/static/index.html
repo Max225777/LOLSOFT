@@ -11,54 +11,71 @@
   --red:#ff5252;--yellow:#ffc857;--green:#4caf50;--blue:#4fc3f7;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;height:100vh}
 
-/* bottom console */
-#console{flex-shrink:0;height:180px;background:#0d0d0d;border-top:1px solid var(--border);display:flex;flex-direction:column}
-#console-bar{display:flex;align-items:center;gap:8px;padding:4px 10px;background:#141414;border-bottom:1px solid var(--border);flex-shrink:0}
-#console-bar span{font-size:11px;color:var(--sub)}
-#console-body{flex:1;overflow-y:auto;padding:5px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;line-height:1.6;word-break:break-word;white-space:pre-wrap}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-
-/* top bar */
-#topbar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
-#topbar h1{font-size:16px;color:var(--accent);font-weight:700;letter-spacing:1px}
+/* ── topbar ── */
+#topbar{display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:100}
+#topbar h1{font-size:15px;color:var(--accent);font-weight:700;letter-spacing:1px}
 #topbar .sub{color:var(--sub);font-size:11px}
-#ws-dot{width:7px;height:7px;border-radius:50%;background:var(--sub);transition:.3s;margin-left:4px}
+#ws-dot{width:7px;height:7px;border-radius:50%;background:var(--sub);transition:.3s;margin-left:2px}
 #ws-dot.on{background:var(--green)}
 .spacer{flex:1}
 
-/* nav tabs */
-#nav{display:flex;gap:2px;padding:6px 10px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
-.tab{padding:5px 14px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--sub);font-weight:500;transition:.12s;user-select:none}
+/* ── nav tabs ── */
+#nav{display:flex;gap:2px;padding:5px 10px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--sub);font-weight:500;transition:.12s;user-select:none}
 .tab:hover{background:var(--border);color:var(--text)}
 .tab.active{background:var(--accent);color:#111;font-weight:700}
 
-/* panes */
-#content{flex:1;overflow:hidden;position:relative;min-height:0}
-.pane{display:none;position:absolute;inset:0;overflow-y:auto;padding:14px;gap:14px;flex-direction:column}
-.pane.active{display:flex}
+/* ── main 2-col layout ── */
+#main{flex:1;display:flex;overflow:hidden;min-height:0}
+
+/* ── left panel ── */
+#left-panel{width:50%;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+#left-panel-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px}
+#left-panel-body{flex:1;overflow-y:auto;padding:10px}
+
+/* ── right panel ── */
+#right-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* tag stats */
+#tag-stats-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+#tag-stats-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px}
+#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+
+/* console */
+#console{flex-shrink:0;height:210px;background:#0d0d0d;border-top:1px solid var(--border);display:flex;flex-direction:column}
+#console-bar{display:flex;align-items:center;gap:8px;padding:4px 10px;background:#141414;border-bottom:1px solid var(--border);flex-shrink:0}
+#console-bar span{font-size:11px;color:var(--sub)}
+#console-body{flex:1;overflow-y:auto;padding:4px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;line-height:1.6;word-break:break-word;white-space:pre-wrap}
+
+/* ── overlay panes (Markets / Schedule / Settings) ── */
+#overlay{display:none;position:fixed;inset:0;z-index:200;background:var(--bg);flex-direction:column}
+#overlay.show{display:flex}
+#overlay-nav{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+#overlay-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+.overlay-close{background:none;border:1px solid var(--border);color:var(--sub);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px}
+.overlay-close:hover{border-color:var(--accent);color:var(--accent)}
+
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
 
 /* cards */
-.card{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:14px}
-.card-hd{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px}
+.card-hd{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:600}
 
-/* grid helpers */
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .col{display:flex;flex-direction:column;gap:10px}
 label{font-size:12px;color:var(--sub);white-space:nowrap}
 
-/* inputs */
 input,select,textarea{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 9px;font-size:12px;outline:none;transition:.12s;font-family:inherit}
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 input[type=number]{width:72px}
 input[type=time]{width:84px}
-input.wide{min-width:260px;flex:1}
+input.wide{min-width:220px;flex:1}
 
-/* buttons */
 .btn{padding:6px 14px;border-radius:5px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.12s;font-family:inherit}
 .btn-p{background:var(--accent);color:#111}
 .btn-p:hover{background:var(--accent-d)}
@@ -68,17 +85,40 @@ input.wide{min-width:260px;flex:1}
 .btn-d:hover{background:#501616}
 
 /* stat tiles */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
-.stat-tile{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px;text-align:center}
-.stat-val{font-size:26px;font-weight:700}
-.stat-lbl{font-size:10px;color:var(--sub);margin-top:3px;text-transform:uppercase;letter-spacing:.4px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:10px}
+.stat-tile{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center}
+.stat-val{font-size:22px;font-weight:700}
+.stat-lbl{font-size:10px;color:var(--sub);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
 
-/* log box */
-.logbox{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-family:'Consolas','Courier New',monospace;font-size:11px;line-height:1.65;overflow-y:auto}
-.l-ok{color:#6dbf6d}.l-warn{color:var(--yellow)}.l-error{color:var(--red)}.l-info{color:#555}
-.l-ts{color:#3a3a3a}
+/* tag chip */
+.tag-chip{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 11px;display:flex;flex-direction:column;gap:3px;min-width:120px}
+.tag-chip-name{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.tag-chip-count{font-size:13px;font-weight:700;color:var(--text)}
+.tag-chip-cd{font-size:11px;color:var(--yellow)}
+.tag-chip-cd.none{color:var(--green)}
 
-/* market cards */
+/* market status cards */
+.mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px}
+.mkt-status-card.on{border-left:3px solid var(--green)}
+.mkt-status-card.off{border-left:3px solid var(--border);opacity:.6}
+.mkt-status-card.wait{border-left:3px solid var(--yellow)}
+.mkt-head-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mkt-title{font-size:13px;font-weight:700}
+
+/* listings mini table */
+.lst-table{width:100%;border-collapse:collapse;font-size:11px}
+.lst-table th{background:var(--bg);color:var(--sub);font-size:10px;font-weight:600;padding:4px 7px;text-align:left;border-bottom:1px solid var(--border)}
+.lst-table td{padding:4px 7px;border-bottom:1px solid #1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+
+/* schedule */
+.sched-grid{display:flex;gap:2px;align-items:flex-end;margin-top:4px;flex-wrap:wrap}
+.sched-cell{width:26px;border-radius:3px 3px 0 0;min-height:6px;cursor:default;position:relative}
+.sched-cell:hover .sched-tip{display:block}
+.sched-tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;margin-bottom:3px;z-index:10}
+.sched-labels{display:flex;gap:2px;flex-wrap:wrap}
+.sched-lbl{width:26px;text-align:center;font-size:9px;color:var(--sub)}
+
+/* market config cards */
 .mkt-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:12px}
 .mkt-card.off{opacity:.5}
 .mkt-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -92,20 +132,6 @@ input.wide{min-width:260px;flex:1}
 .tag-row input.tname{width:150px}
 .tag-row input.tcnt{width:48px}
 
-/* 24h schedule grid */
-.sched-grid{display:flex;gap:2px;align-items:flex-end;margin-top:6px;flex-wrap:wrap}
-.sched-cell{width:28px;border-radius:3px 3px 0 0;min-height:6px;cursor:default;position:relative}
-.sched-cell:hover .sched-tip{display:block}
-.sched-tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#333;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;margin-bottom:3px;z-index:10}
-.sched-labels{display:flex;gap:2px;flex-wrap:wrap}
-.sched-lbl{width:28px;text-align:center;font-size:9px;color:var(--sub)}
-
-/* bump grid */
-.bump-col{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:28px}
-.bump-col-lbl{font-size:9px;color:var(--sub);margin-top:3px;text-align:center}
-.bump-cell{width:20px;height:8px;border-radius:2px;cursor:default;flex-shrink:0}
-.bump-cell:hover{opacity:.75}
-
 /* table */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
@@ -114,132 +140,86 @@ td{padding:6px 10px;border-bottom:1px solid #1e1e1e}
 tr:hover td{background:#1e1e1e}
 .mine{color:var(--accent)}.other{color:#888}
 
-/* token wrap */
 .tok-wrap{position:relative;flex:1;max-width:460px}
 .tok-wrap input{width:100%;padding-right:32px}
-.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--sub);font-size:14px;padding:0}
 
-/* toast */
 #toast{position:fixed;bottom:14px;right:14px;padding:9px 15px;border-radius:6px;font-size:12px;font-weight:600;display:none;z-index:9999;pointer-events:none}
 .t-ok{background:#1a3a1a;border:1px solid var(--green);color:#6dbf6d}
 .t-err{background:#3a1a1a;border:1px solid var(--red);color:#ff7070}
 
-/* scrollbar */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 </style>
 </head>
 <body>
+
+<!-- ── TOPBAR ── -->
 <div id="topbar">
   <h1>LOLSOFT</h1>
   <span class="sub">Market Auto-Bumper</span>
   <div id="ws-dot" title="WebSocket"></div>
   <div class="spacer"></div>
+  <div class="tab" onclick="openOverlay('markets')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:12px;color:var(--sub);border:1px solid var(--border)">🏪 Ринки</div>
+  <div class="tab" onclick="openOverlay('schedule')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:12px;color:var(--sub);border:1px solid var(--border)">🕐 Розклад</div>
+  <div class="tab" onclick="openOverlay('settings')" style="cursor:pointer;padding:4px 10px;border-radius:5px;font-size:12px;color:var(--sub);border:1px solid var(--border)">⚙ Налашт.</div>
 </div>
 
 <datalist id="tags-datalist"></datalist>
-<div id="nav">
-  <div class="tab active" data-tab="status">📡 Статус</div>
-  <div class="tab" data-tab="markets">🏪 Ринки</div>
-  <div class="tab" data-tab="schedule">🕐 Розклад</div>
-  <div class="tab" data-tab="settings">⚙ Налаштування</div>
-</div>
 
-<div id="content">
+<!-- ── MAIN 2-COL ── -->
+<div id="main">
 
-<!-- ── STATUS ────────────────────────────────────────────────────────────── -->
-<div class="pane active" id="pane-status">
-  <div class="row" style="justify-content:flex-end">
-    <button class="btn-s" onclick="loadMarketStatus()">🔄 Оновити</button>
+  <!-- LEFT: Markets status -->
+  <div id="left-panel">
+    <div id="left-panel-header">
+      <span>📡 Ринки — Топ лоти</span>
+      <div class="spacer"></div>
+      <button class="btn-s" onclick="loadMarketStatus()" style="padding:2px 8px;font-size:10px">🔄</button>
+    </div>
+    <div id="left-panel-body">
+      <div id="day-stats" class="stat-grid"></div>
+      <div id="status-list"></div>
+    </div>
   </div>
-  <div id="day-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px"></div>
-  <div id="status-list" class="col"></div>
+
+  <!-- RIGHT: tag stats + console -->
+  <div id="right-panel">
+    <div id="tag-stats-wrap">
+      <div id="tag-stats-header">
+        <span>📦 Активні лоти по тегах</span>
+        <div class="spacer"></div>
+        <span style="font-size:10px;color:var(--sub)" id="cd-hint">🕐 = на кулдауні</span>
+      </div>
+      <div id="tag-stats-body">
+        <span style="color:var(--sub);font-size:11px;padding:10px">Завантаження…</span>
+      </div>
+    </div>
+
+    <!-- CONSOLE -->
+    <div id="console">
+      <div id="console-bar">
+        <span style="color:var(--accent);font-weight:700;font-size:11px">CONSOLE</span>
+        <div id="ws-dot2" style="width:6px;height:6px;border-radius:50%;background:var(--sub);transition:.3s"></div>
+        <span id="console-count" style="color:var(--sub)"></span>
+        <div class="spacer"></div>
+        <button class="btn-s" onclick="clearLogs()">Очистити</button>
+      </div>
+      <div id="console-body"></div>
+    </div>
+  </div>
 </div>
 
-<!-- ── MARKETS ────────────────────────────────────────────────────────────── -->
-<div class="pane" id="pane-markets">
-  <div class="row">
-    <button class="btn btn-p" onclick="addMarket()">+ Додати ринок</button>
-    <button class="btn-s" onclick="saveAll()">💾 Зберегти все</button>
+<!-- ── OVERLAY (Markets / Schedule / Settings) ── -->
+<div id="overlay">
+  <div id="overlay-nav">
+    <span id="overlay-title" style="font-size:14px;font-weight:700;color:var(--accent)"></span>
     <div class="spacer"></div>
-    <select id="mkt-sel" style="min-width:160px" onchange="loadListings()"></select>
-    <button class="btn-s" onclick="loadListings()">🔄 Таблиця</button>
+    <button class="overlay-close" onclick="closeOverlay()">✕ Закрити</button>
   </div>
-
-  <div id="markets-list" class="col"></div>
-
-  <div class="card">
-    <div class="card-hd">Лоти: <span id="lst-name" style="color:var(--accent)"></span></div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
-        <tbody id="lst-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:20px">Оберіть ринок →</td></tr></tbody>
-      </table>
-    </div>
-  </div>
+  <div id="overlay-body"></div>
 </div>
 
-<!-- ── SCHEDULE ───────────────────────────────────────────────────────────── -->
-<div class="pane" id="pane-schedule">
-  <div class="card">
-    <div class="card-hd">Розклад роботи по ринках — 24 год. Зелений = активний час, темний = вимкнено</div>
-    <div id="sched-container" class="col" style="gap:14px;margin-top:4px"></div>
-  </div>
-</div>
-
-<!-- ── SETTINGS ───────────────────────────────────────────────────────────── -->
-<div class="pane" id="pane-settings">
-  <div class="card">
-    <div class="card-hd">API Токен</div>
-    <div style="font-size:12px;color:var(--sub)" id="tok-hint">
-      Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render.
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hd">Автоматизація</div>
-    <div style="font-size:12px;color:var(--green)">✅ Авто-підняття і авто-оновлення завжди увімкнено</div>
-  </div>
-
-  <div class="card">
-    <div class="card-hd">Статус кешу лотів</div>
-    <div id="cache-status" style="font-size:12px;color:var(--sub)">Завантаження…</div>
-    <div id="cache-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-      🔄 Автоматично оновлюється <b style="color:var(--text)">раз на годину</b>. Ручне оновлення — кнопки нижче або у вкладці Ринки.
-    </div>
-    <div class="row" style="margin-top:8px;gap:6px">
-      <button class="btn-s" onclick="manualRefreshAll('tags')">🏷 Оновити теги</button>
-      <button class="btn-s" onclick="manualRefreshAll('items')">📦 Оновити лоти</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="row" style="gap:8px">
-      <button class="btn btn-p" onclick="saveAll()">💾 Зберегти</button>
-      <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ Завантажити ZIP</button>
-      <button class="btn-s" onclick="copyConfigJson()" title="Скопіювати конфіг для Render ENV">📋 CONFIG_JSON</button>
-    </div>
-    <div id="save-hint" style="font-size:11px;color:var(--sub);margin-top:8px"></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">
-      📋 <b style="color:var(--text)">CONFIG_JSON</b> — скопіюй і встав як env var на Render щоб конфіг зберігся після редеплою.
-    </div>
-  </div>
-</div>
-
-</div><!-- /content -->
-
-<div id="console">
-  <div id="console-bar">
-    <span style="color:var(--accent);font-weight:700;font-size:11px">CONSOLE</span>
-    <div id="ws-dot2" style="width:6px;height:6px;border-radius:50%;background:var(--sub);transition:.3s"></div>
-    <span id="console-count" style="color:var(--sub)"></span>
-    <div class="spacer"></div>
-    <button class="btn-s" onclick="clearLogs()">Очистити</button>
-  </div>
-  <div id="console-body"></div>
-</div>
 <div id="toast"></div>
 
 <script>
@@ -247,21 +227,8 @@ tr:hover td{background:#1e1e1e}
 let CFG = {};
 let logLines = [];
 let ws = null;
-let marketsLocal = []; // local copy for DOM manipulation
-
-// ── tabs ──────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active');
-    document.getElementById('pane-'+t.dataset.tab).classList.add('active');
-    if (t.dataset.tab==='status')   loadMarketStatus();
-    if (t.dataset.tab==='markets')  renderMarkets();
-    if (t.dataset.tab==='schedule') renderSchedule();
-    if (t.dataset.tab==='settings') populateSettings();
-  });
-});
+let marketsLocal = [];
+let availableTags = [];
 
 // ── api ───────────────────────────────────────────────────────────────────────
 async function api(url, opts={}) {
@@ -270,7 +237,8 @@ async function api(url, opts={}) {
   return r.json();
 }
 
-// ── toast ─────────────────────────────────────────────────────────────────────
+function x(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
 function toast(msg, ok=true) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -280,7 +248,6 @@ function toast(msg, ok=true) {
   el._t = setTimeout(()=>el.style.display='none', 3000);
 }
 
-// ── load config ───────────────────────────────────────────────────────────────
 async function loadCfg() {
   CFG = await api('/api/config');
   marketsLocal = JSON.parse(JSON.stringify(CFG.markets || []));
@@ -296,14 +263,13 @@ async function loadDayStats() {
     const tile = (val, lbl, color) =>
       `<div class="stat-tile"><div class="stat-val" style="color:${color}">${val}</div><div class="stat-lbl">${lbl}</div></div>`;
     el.innerHTML =
-      tile(s.total,       'Спроб сьогодні',   'var(--text)') +
-      tile(s.ok,          '✅ Вдалих',         'var(--green)') +
-      tile(s.fail,        '⛔ Невдалих',        'var(--red)') +
-      tile(s.limit_fails, '🚫 Ліміт підняттів','var(--yellow)');
+      tile(s.total, 'Спроб', 'var(--text)') +
+      tile(s.ok, '✅ Вдало', 'var(--green)') +
+      tile(s.fail, '⛔ Невдало', 'var(--red)');
   } catch(e) {}
 }
 
-// ── market status ─────────────────────────────────────────────────────────────
+// ── market status (left panel) ────────────────────────────────────────────────
 async function loadMarketStatus() {
   loadDayStats();
   try {
@@ -311,7 +277,7 @@ async function loadMarketStatus() {
     const c = document.getElementById('status-list');
     c.innerHTML = '';
     if (!markets.length) {
-      c.innerHTML = '<div style="color:var(--sub);padding:20px">Ринків немає — додайте їх у вкладці Ринки</div>';
+      c.innerHTML = '<div style="color:var(--sub);padding:20px;font-size:12px">Ринків немає — додайте у 🏪 Ринки</div>';
       return;
     }
     markets.forEach(m => c.appendChild(buildStatusCard(m)));
@@ -320,84 +286,142 @@ async function loadMarketStatus() {
 
 function buildStatusCard(m) {
   const on = m.enabled && m.active;
+  const waiting = m.enabled && !m.active;
   const div = document.createElement('div');
-  div.className = 'card';
-  div.style.borderLeft = `3px solid ${on ? 'var(--green)' : (m.enabled ? 'var(--yellow)' : 'var(--border)')}`;
+  div.className = 'mkt-status-card ' + (on ? 'on' : waiting ? 'wait' : 'off');
 
-  const hours = m.work_from && m.work_to ? `${m.work_from} — ${m.work_to}` : 'цілодобово';
-  const statusText = !m.enabled ? 'ВИМКНЕНО' : m.active ? 'АКТИВНИЙ' : 'очікування';
-  const statusColor = !m.enabled ? 'var(--red)' : m.active ? 'var(--green)' : 'var(--yellow)';
+  const hours = m.work_from && m.work_to ? `${m.work_from}–${m.work_to}` : 'цілодобово';
+  const statusColor = !m.enabled ? 'var(--sub)' : m.active ? 'var(--green)' : 'var(--yellow)';
+  const statusText  = !m.enabled ? 'ВИМК' : m.active ? '●' : '⏳';
 
   let rows = '';
   if (m.listings && m.listings.length) {
     rows = m.listings.map((l, i) => {
       const mine = l.is_mine;
-      const color = mine ? 'var(--green)' : 'var(--red)';
-      return `<tr style="background:${mine ? '#0d1f0d' : '#1f0d0d'}">
-        <td style="color:var(--sub);font-size:11px;text-align:center">${i+1}</td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          <a href="${x(l.link||'')}" target="_blank" style="color:${color}">${x(l.title||'')}</a>
-        </td>
-        <td style="color:${color};font-size:11px">${x(l.seller||'')}</td>
-        <td style="color:var(--sub);font-size:11px">${x(l.price||'')}</td>
-        <td style="font-size:10px;color:var(--sub)">${l.bumped_at||''}</td>
+      const color = mine ? 'var(--green)' : '#666';
+      return `<tr>
+        <td style="color:var(--sub);width:20px">${i+1}</td>
+        <td style="max-width:180px"><a href="${x(l.link||'')}" target="_blank" style="color:${color}">${x(l.title||'')}</a></td>
+        <td style="color:${color}">${x(l.seller||'')}</td>
+        <td style="color:var(--sub)">${x(l.price||'')}</td>
       </tr>`;
     }).join('');
   } else {
-    rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:10px">Немає даних</td></tr>';
+    rows = '<tr><td colspan="4" style="color:var(--sub);text-align:center;padding:8px">Немає даних</td></tr>';
   }
 
   div.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:14px;font-weight:700">${x(m.name)}</span>
-      <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusText}</span>
-      <span style="font-size:11px;color:var(--sub)">${hours}</span>
+    <div class="mkt-head-row">
+      <span class="mkt-title">${x(m.name)}</span>
+      <span style="color:${statusColor};font-size:13px">${statusText}</span>
+      <span style="font-size:10px;color:var(--sub)">${hours}</span>
       <div class="spacer"></div>
-      <button class="btn-s" onclick="bumpNow('${x(m.name)}')">⚡ Підняти</button>
+      <button class="btn-s" onclick="bumpNow('${x(m.name)}')" style="padding:2px 8px;font-size:10px">⚡</button>
     </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Лот</th><th>Продавець</th><th>Ціна</th><th>Піднято</th></tr></thead>
+    <div style="overflow-x:auto">
+      <table class="lst-table">
+        <thead><tr><th>#</th><th>Лот</th><th>Продавець</th><th>Ціна</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>
-    <div style="font-size:10px;color:var(--sub);margin-top:6px">
-      <span style="color:var(--green)">■</span> мій лот &nbsp;
-      <span style="color:var(--red)">■</span> чужий
     </div>`;
   return div;
 }
 
-// ── available tags cache ──────────────────────────────────────────────────────
-let availableTags = [];
+// ── tag cooldown stats (right top) ───────────────────────────────────────────
+async function loadTagStats() {
+  try {
+    const data = await api('/api/cooldown-stats');
+    const el = document.getElementById('tag-stats-body');
+    if (!data.length) {
+      el.innerHTML = '<span style="color:var(--sub);font-size:11px;padding:10px">Кеш ще не завантажено</span>';
+      return;
+    }
+    el.innerHTML = data.map(t => {
+      const cdClass = t.cooldown > 0 ? '' : 'none';
+      const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
+      return `<div class="tag-chip">
+        <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
+        <div class="tag-chip-count">${t.total} <span style="font-size:10px;color:var(--sub)">лотів</span></div>
+        <div class="tag-chip-cd ${cdClass}">${cdText}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.warn(e); }
+}
+
+// ── overlay (Markets / Schedule / Settings) ───────────────────────────────────
+function openOverlay(section) {
+  const overlay = document.getElementById('overlay');
+  overlay.classList.add('show');
+  const titles = {markets:'🏪 Ринки', schedule:'🕐 Розклад', settings:'⚙ Налаштування'};
+  document.getElementById('overlay-title').textContent = titles[section] || section;
+  const body = document.getElementById('overlay-body');
+  body.innerHTML = '<div style="color:var(--sub);padding:20px">Завантаження…</div>';
+
+  if (section === 'markets')  renderMarketsOverlay(body);
+  if (section === 'schedule') renderScheduleOverlay(body);
+  if (section === 'settings') renderSettingsOverlay(body);
+}
+
+function closeOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ── markets overlay ───────────────────────────────────────────────────────────
+async function renderMarketsOverlay(body) {
+  await loadCfg();
+  await loadAvailableTags();
+  body.innerHTML = '';
+
+  // toolbar
+  const toolbar = document.createElement('div');
+  toolbar.className = 'row';
+  toolbar.style.marginBottom = '10px';
+  toolbar.innerHTML = `
+    <button class="btn btn-p" onclick="addMarket()">+ Додати ринок</button>
+    <button class="btn-s" onclick="saveAll()">💾 Зберегти все</button>
+    <div class="spacer"></div>
+    <select id="mkt-sel" style="min-width:160px" onchange="loadListings()"></select>
+    <button class="btn-s" onclick="loadListings()">🔄 Таблиця</button>`;
+  body.appendChild(toolbar);
+
+  const list = document.createElement('div');
+  list.id = 'markets-list';
+  list.className = 'col';
+  body.appendChild(list);
+  marketsLocal.forEach((m, i) => list.appendChild(buildMktCard(m, i)));
+  _rebuildMktSelect();
+
+  const listingsCard = document.createElement('div');
+  listingsCard.className = 'card';
+  listingsCard.innerHTML = `
+    <div class="card-hd">Лоти: <span id="lst-name" style="color:var(--accent)"></span></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
+        <tbody id="lst-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:20px">Оберіть ринок →</td></tr></tbody>
+      </table>
+    </div>`;
+  body.appendChild(listingsCard);
+}
 
 async function loadAvailableTags() {
   try {
     availableTags = await api('/api/tags');
-    // update datalist
     const dl = document.getElementById('tags-datalist');
-    if (dl) {
-      dl.innerHTML = availableTags.map(t => `<option value="${x(t)}">`).join('');
-    }
+    if (dl) dl.innerHTML = availableTags.map(t => `<option value="${x(t)}">`).join('');
   } catch(e) {}
-}
-
-// ── markets render ────────────────────────────────────────────────────────────
-async function renderMarkets() {
-  await loadCfg();
-  await loadAvailableTags();
-  _renderMarketList();
-  _rebuildMktSelect();
 }
 
 function _renderMarketList() {
   const c = document.getElementById('markets-list');
+  if (!c) return;
   c.innerHTML = '';
   marketsLocal.forEach((m, i) => c.appendChild(buildMktCard(m, i)));
 }
 
 function _rebuildMktSelect() {
   const sel = document.getElementById('mkt-sel');
+  if (!sel) return;
   const prev = sel.value;
   sel.innerHTML = '';
   marketsLocal.forEach(m => {
@@ -412,7 +436,6 @@ function buildMktCard(m, idx) {
   const div = document.createElement('div');
   div.className = 'mkt-card' + (m.enabled===false?' off':'');
   div.dataset.idx = idx;
-
   const on = m.enabled !== false;
   div.innerHTML = `
     <div class="mkt-head">
@@ -458,8 +481,6 @@ function buildMktCard(m, idx) {
   return div;
 }
 
-function x(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-
 function toggleMktEnabled(chk, idx) {
   const card = chk.closest('.mkt-card');
   const on = chk.checked;
@@ -483,7 +504,7 @@ function addMarket() {
     refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:''};
   marketsLocal.push(newMkt);
   const c = document.getElementById('markets-list');
-  c.appendChild(buildMktCard(newMkt, marketsLocal.length-1));
+  if (c) c.appendChild(buildMktCard(newMkt, marketsLocal.length-1));
   _rebuildMktSelect();
 }
 
@@ -511,50 +532,116 @@ function collectMarkets() {
   }));
 }
 
-// ── schedule grid ─────────────────────────────────────────────────────────────
-async function renderSchedule() {
+// ── schedule overlay ──────────────────────────────────────────────────────────
+async function renderScheduleOverlay(body) {
   await loadCfg();
+  body.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'card';
+  wrap.innerHTML = '<div class="card-hd">Розклад роботи по ринках — 24 год.</div><div id="sched-container" class="col" style="gap:14px;margin-top:4px"></div>';
+  body.appendChild(wrap);
+
   const c = document.getElementById('sched-container');
-  c.innerHTML = '';
   const markets = CFG.markets || [];
-  if (!markets.length) { c.innerHTML = '<div style="color:var(--sub)">Ринків немає — додайте їх у вкладці Ринки</div>'; return; }
+  if (!markets.length) { c.innerHTML = '<div style="color:var(--sub)">Ринків немає</div>'; return; }
 
   markets.forEach(m => {
-    const wrap = document.createElement('div');
     const from = m.work_from ? parseInt(m.work_from.split(':')[0]) : 0;
     const to   = m.work_to   ? parseInt(m.work_to.split(':')[0])   : 23;
     const allDay = !m.work_from && !m.work_to;
-
     const cells = Array.from({length:24},(_,h)=>{
       const active = m.enabled!==false && (allDay || (h>=from && h<=to));
       return `<div class="sched-cell" style="background:${active?'var(--green)':'var(--border)'};height:${active?22:10}px">
         <div class="sched-tip">${h}:00${active?' ✅':' —'}</div></div>`;
     }).join('');
-
     const lbls = Array.from({length:24},(_,h)=>`<div class="sched-lbl">${h}</div>`).join('');
-
-    wrap.innerHTML = `
-      <div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${m.enabled!==false?'var(--text)':'var(--sub)'}">
-          ${x(m.name)}
-          <span style="font-size:10px;font-weight:400;color:var(--sub);margin-left:8px">
-            ${allDay?'цілодобово':(m.work_from+' — '+m.work_to)}
-            ${m.enabled===false?' [вимкнено]':''}
-          </span>
-        </div>
-        <div class="sched-grid">${cells}</div>
-        <div class="sched-labels">${lbls}</div>
-      </div>`;
-    c.appendChild(wrap);
+    const d = document.createElement('div');
+    d.innerHTML = `
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${m.enabled!==false?'var(--text)':'var(--sub)'}">
+        ${x(m.name)}
+        <span style="font-size:10px;font-weight:400;color:var(--sub);margin-left:8px">
+          ${allDay?'цілодобово':(m.work_from+' — '+m.work_to)}
+          ${m.enabled===false?' [вимкнено]':''}
+        </span>
+      </div>
+      <div class="sched-grid">${cells}</div>
+      <div class="sched-labels">${lbls}</div>`;
+    c.appendChild(d);
   });
+}
+
+// ── settings overlay ──────────────────────────────────────────────────────────
+async function renderSettingsOverlay(body) {
+  await loadCfg();
+  body.innerHTML = '';
+
+  const tokenCard = document.createElement('div');
+  tokenCard.className = 'card';
+  tokenCard.innerHTML = `
+    <div class="card-hd">API Токен</div>
+    <div style="font-size:12px;color:var(--sub)">
+      Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render —
+      ${CFG._token_set
+        ? '<span style="color:var(--green)">✅ встановлено</span>'
+        : '<span style="color:var(--red)">⛔ не встановлено</span>'}
+    </div>`;
+  body.appendChild(tokenCard);
+
+  const autoCard = document.createElement('div');
+  autoCard.className = 'card';
+  autoCard.innerHTML = `
+    <div class="card-hd">Автоматизація</div>
+    <div style="font-size:12px;color:var(--green)">✅ Авто-підняття і авто-оновлення завжди увімкнено</div>`;
+  body.appendChild(autoCard);
+
+  // cache status
+  let cacheHtml = '';
+  try {
+    const s = await api('/api/cache-status');
+    cacheHtml = s.loaded_at
+      ? `<span style="color:var(--green)">✅ Завантажено о ${s.loaded_at}</span> — ${s.total_items} лотів`
+      : '<span style="color:var(--yellow)">⏳ Ще не завантажено</span>';
+    const tagChips = s.tags.length
+      ? s.tags.map(t=>`<span style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px">
+          <span style="color:var(--accent)">${x(t.tag)}</span>
+          <span style="color:var(--sub)"> ${t.count}</span></span>`).join('')
+      : '';
+    const cacheCard = document.createElement('div');
+    cacheCard.className = 'card';
+    cacheCard.innerHTML = `
+      <div class="card-hd">Статус кешу лотів</div>
+      <div style="font-size:12px;color:var(--sub)">${cacheHtml}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${tagChips}</div>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button class="btn-s" onclick="refreshMarketTags('')">🏷 Теги</button>
+        <button class="btn-s" onclick="refreshMarketItems('')">📦 Лоти</button>
+      </div>`;
+    body.appendChild(cacheCard);
+  } catch(e) {}
+
+  const saveCard = document.createElement('div');
+  saveCard.className = 'card';
+  saveCard.innerHTML = `
+    <div class="row" style="gap:8px">
+      <button class="btn btn-p" onclick="saveAll()">💾 Зберегти</button>
+      <button class="btn-s" onclick="location.href='/api/download-zip'">⬇ ZIP</button>
+      <button class="btn-s" onclick="copyConfigJson()" title="Скопіювати конфіг для Render ENV">📋 CONFIG_JSON</button>
+    </div>
+    <div id="save-hint" style="font-size:11px;color:var(--sub);margin-top:8px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">📋 <b style="color:var(--text)">CONFIG_JSON</b> — встав як env var на Render.</div>`;
+  body.appendChild(saveCard);
 }
 
 // ── listings table ─────────────────────────────────────────────────────────────
 async function loadListings() {
-  const name = document.getElementById('mkt-sel').value;
+  const sel = document.getElementById('mkt-sel');
+  if (!sel) return;
+  const name = sel.value;
   if (!name) return;
-  document.getElementById('lst-name').textContent = name;
+  const nameEl = document.getElementById('lst-name');
+  if (nameEl) nameEl.textContent = name;
   const tb = document.getElementById('lst-body');
+  if (!tb) return;
   tb.innerHTML = '<tr><td colspan="6" style="color:var(--sub);text-align:center">Завантаження…</td></tr>';
   try {
     const data = await api('/api/market-listings/'+encodeURIComponent(name));
@@ -575,80 +662,31 @@ async function loadListings() {
   }
 }
 
-// ── settings form ─────────────────────────────────────────────────────────────
-async function loadCacheStatus() {
-  try {
-    const s = await api('/api/cache-status');
-    const el = document.getElementById('cache-status');
-    if (!el) return;
-    if (s.loaded_at) {
-      el.innerHTML = `<span style="color:var(--green)">✅ Завантажено о ${s.loaded_at}</span> — всього <b style="color:var(--text)">${s.total_items}</b> лотів по тегах`;
-    } else {
-      el.innerHTML = '<span style="color:var(--yellow)">⏳ Ще не завантажено — оновиться автоматично при старті</span>';
-    }
-    const tagsEl = document.getElementById('cache-tags');
-    if (tagsEl) {
-      tagsEl.innerHTML = s.tags.length
-        ? s.tags.map(t => `<span style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:11px">
-            <span style="color:var(--accent)">${x(t.tag)}</span>
-            <span style="color:var(--sub)"> ${t.count} лот.</span>
-          </span>`).join('')
-        : '<span style="color:var(--sub);font-size:11px">Теги ще не завантажені</span>';
-    }
-  } catch(e) { console.warn(e); }
-}
-
-async function populateSettings() {
-  await loadCfg();
-  await loadAvailableTags();
-  await loadCacheStatus();
-  const hint = document.getElementById('tok-hint');
-  if (hint) hint.innerHTML = CFG._token_set
-    ? 'Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render — <span style="color:var(--green)">✅ встановлено</span>'
-    : 'Токен береться з env var <b style="color:var(--accent)">LOLZ_TOKEN</b> на Render — <span style="color:var(--red)">⛔ не встановлено</span>';
-}
-
-// ── save all ──────────────────────────────────────────────────────────────────
+// ── save / refresh ─────────────────────────────────────────────────────────────
 async function saveAll() {
-  // always use DOM cards if rendered, else fall back to marketsLocal
   const domCards = document.querySelectorAll('.mkt-card');
   const markets = domCards.length ? collectMarkets() : marketsLocal;
-
-  const patch = {
-    ...CFG,
-    autorefresh: true,
-    autobump:    true,
-    markets,
-  };
-  delete patch.token; // token always from LOLZ_TOKEN env var
-
+  const patch = {...CFG, autorefresh:true, autobump:true, markets};
+  delete patch.token;
   try {
     await api('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
     toast('✅ Збережено');
-    document.getElementById('save-hint').textContent = 'Збережено: '+new Date().toLocaleTimeString();
+    const hint = document.getElementById('save-hint');
+    if (hint) hint.textContent = 'Збережено: '+new Date().toLocaleTimeString();
     await loadCfg();
-    if (document.getElementById('pane-schedule').classList.contains('active')) renderSchedule();
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
 async function refreshMarketTags(name) {
-  try {
-    await api('/api/refresh-tags', {method:'POST'});
-    toast('🏷 Теги оновлюються…');
-  } catch(e) { toast('⛔ '+e.message, false); }
+  try { await api('/api/refresh-tags', {method:'POST'}); toast('🏷 Теги оновлюються…'); } catch(e) { toast('⛔ '+e.message, false); }
 }
 
 async function refreshMarketItems(name) {
   try {
     await api('/api/refresh-cache', {method:'POST'});
     toast('📦 Лоти оновлюються…');
-    setTimeout(loadCacheStatus, 5000);
+    setTimeout(loadTagStats, 5000);
   } catch(e) { toast('⛔ '+e.message, false); }
-}
-
-async function manualRefreshAll(type) {
-  if (type === 'tags') return refreshMarketTags('');
-  return refreshMarketItems('');
 }
 
 async function copyConfigJson() {
@@ -656,31 +694,35 @@ async function copyConfigJson() {
     const cfg = await api('/api/config');
     const out = {...cfg};
     delete out._token_set;
-    delete out.token; // token comes from LOLZ_TOKEN env var, not CONFIG_JSON
-    const json = JSON.stringify(out);
-    await navigator.clipboard.writeText(json);
-    toast('📋 CONFIG_JSON скопійовано — встав в Render → Environment → CONFIG_JSON');
+    delete out.token;
+    await navigator.clipboard.writeText(JSON.stringify(out));
+    toast('📋 CONFIG_JSON скопійовано — встав в Render → Environment');
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
 async function bumpNow(name) {
   try {
     await api('/api/bump-now/'+encodeURIComponent(name), {method:'POST'});
-    toast('⚡ Підняття запущено: '+name);
+    toast('⚡ Підняття: '+name);
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
+// ── WebSocket + console ────────────────────────────────────────────────────────
+// Messages to hide (спам без корисної інфо)
+function shouldHideLog(text) {
+  if (!text) return false;
+  if (text.includes('— ліміт, кулдаун')) return true;
+  if (/не вдалось підняти/.test(text)) return true;
+  return false;
+}
 
-// ── WebSocket ──────────────────────────────────────────────────────────────────
 function connectWS() {
   const proto = location.protocol==='https:'?'wss':'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/logs`);
-
   const setDot = (on) => {
     [document.getElementById('ws-dot'), document.getElementById('ws-dot2')]
-      .forEach(d=>{ if(d){ d.style.background=on?'var(--green)':'var(--sub)'; } });
+      .forEach(d=>{ if(d){ d.style.background=on?'var(--green)':'var(--sub)'; d.classList.toggle('on',on); } });
   };
-
   ws.onopen  = () => setDot(true);
   ws.onclose = () => { setDot(false); setTimeout(connectWS, 3000); };
   ws.onerror = () => ws.close();
@@ -690,6 +732,7 @@ function connectWS() {
 }
 
 function addLogLine(msg) {
+  if (shouldHideLog(msg.text)) return;
   logLines.push(msg);
   if (logLines.length > 500) logLines = logLines.slice(-500);
   _paintConsole();
@@ -714,8 +757,10 @@ function clearLogs() { logLines=[]; _paintConsole(); }
 (async () => {
   connectWS();
   await loadCfg();
-  await loadMarketStatus();
+  loadMarketStatus();
+  loadTagStats();
   setInterval(loadMarketStatus, 15000);
+  setInterval(loadTagStats, 10000);
 })();
 </script>
 </body>
