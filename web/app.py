@@ -401,16 +401,24 @@ class MarketEngine:
         start_idx = self._bump_idx.get(tag, 0) % total
         bumped    = False
 
-        for attempt in range(max(total, 10)):
-            idx = (start_idx + attempt) % total
+        MAX_API_TRIES = 10   # max real API calls per tick (same as desktop app)
+        api_tried     = 0
+        scan_limit    = total  # scan all items to find non-cooled ones
+
+        for scan in range(scan_limit):
+            if api_tried >= MAX_API_TRIES:
+                break
+            idx = (start_idx + scan) % total
             it  = my_items[idx]
             iid = str(it.get("item_id", ""))
 
+            # skip items in cooldown (no API call)
             if self._cooldowns.get(iid, 0) > now:
                 continue
 
             title = it.get("title") or it.get("title_en") or f"#{iid}"
             ok, reason = bump_item(token, iid)
+            api_tried += 1
 
             if ok:
                 self._bump_idx[tag] = (idx + 1) % total
@@ -440,7 +448,7 @@ class MarketEngine:
 
         if not bumped:
             avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
-            broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({avail}/{total} доступних)", "warn")
+            broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({api_tried} спроб, {avail}/{total} доступних)", "warn")
 
         self._advance_cycle(active_tags)
 
