@@ -788,7 +788,19 @@ def get_cooldown_stats():
                 if engine._cooldowns.get(iid, 0) > now:
                     on_cd += 1
             break  # same items across all engines, count once
-        result.append({"tag": tag, "total": total, "cooldown": on_cd})
+        price_sum = 0.0
+        currency = ""
+        for it in items:
+            try:
+                price_sum += float(it.get("price", 0) or 0)
+                if not currency:
+                    currency = it.get("price_currency", "") or it.get("currency", "") or ""
+            except (TypeError, ValueError):
+                pass
+        result.append({
+            "tag": tag, "total": total, "cooldown": on_cd,
+            "price_sum": round(price_sum, 2), "currency": currency,
+        })
     return sorted(result, key=lambda r: r["tag"])
 
 @app.post("/api/bump-now/{market_name}")
