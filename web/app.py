@@ -327,8 +327,9 @@ class MarketEngine:
     def __init__(self, cfg: dict, token_fn):
         self.cfg          = cfg
         self.token_fn     = token_fn  # callable → str
-        self._bump_idx:  dict[str, int]   = {}   # tag → next item index
-        self._cooldowns: dict[str, float] = {}   # item_id → expires_at
+        self._bump_idx:     dict[str, int]   = {}   # tag → next item index
+        self._cooldowns:    dict[str, float] = {}   # item_id → expires_at
+        self._cooldown_tags: dict[str, str]  = {}   # item_id → tag_name
         self._cycle_tag_idx: int = 0             # current tag index in active_tags
         self._cycle_done:    int = 0             # bumps done for current tag this cycle
 
@@ -436,7 +437,8 @@ class MarketEngine:
 
             if ok:
                 self._bump_idx[tag] = (idx + 1) % total
-                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC  # don't retry for 1h
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
                 broadcaster.emit(f"✅ [{name}][{tag}] {title}  ({self._cycle_done+1}/{bumps_needed})", "ok")
                 record_bump(name, tag, iid, title, True, "")
                 bumped = True
@@ -444,22 +446,26 @@ class MarketEngine:
 
             elif reason.startswith("продано/видалено"):
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
                 record_bump(name, tag, iid, title, False, reason)
                 broadcaster.emit(f"🗑 [{name}][{tag}] {title} — не знайдено, перевіримо через 1 год", "warn")
 
             elif reason.startswith("ліміт"):
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
                 record_bump(name, tag, iid, title, False, reason)
                 broadcaster.emit(f"🚫 [{name}][{tag}] {title} — ліміт, кулдаун 1 год", "warn")
 
             elif reason.startswith("кулдаун"):
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
                 broadcaster.emit(f"⏳ [{name}][{tag}] {title} — кулдаун, пропуск на 1 год", "warn")
 
             else:
                 broadcaster.emit(f"⛔ [{name}][{tag}] {title} — {reason}", "error")
                 record_bump(name, tag, iid, title, False, reason)
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
 
         if not bumped:
             avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
@@ -779,13 +785,12 @@ def get_cooldown_stats():
     result = []
     for tag, items in _tag_items_cache.items():
         total = len(items)
-        item_ids = {str(it.get("item_id", "")) for it in items}
-        locked_ids: set[str] = set()
+        on_cd = 0
         for engine in sched_mgr._engines.values():
-            for iid in item_ids:
-                if engine._cooldowns.get(iid, 0) > now:
-                    locked_ids.add(iid)
-        on_cd = len(locked_ids)
+            on_cd += sum(
+                1 for iid, exp in engine._cooldowns.items()
+                if exp > now and engine._cooldown_tags.get(iid) == tag
+            )
         price_sum = 0.0
         currency = ""
         for it in items:
