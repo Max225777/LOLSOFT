@@ -162,10 +162,14 @@ tr:hover td{background:#1e1e1e}
     <div id="topbar">
       <h1>LOLSOFT</h1>
       <div id="ws-dot" title="WebSocket"></div>
-      <div class="spacer"></div>
-      <span style="font-size:10px;color:var(--sub)">📡 Ринки</span>
+      <div id="status-bar" style="display:flex;align-items:center;gap:6px;flex:1;margin:0 8px;overflow:hidden">
+        <span id="sb-token"  style="font-size:10px"></span>
+        <span id="sb-cache"  style="font-size:10px"></span>
+        <span id="sb-jobs"   style="font-size:10px"></span>
+        <span id="sb-time"   style="font-size:10px;color:#333;margin-left:auto"></span>
+      </div>
       <button class="btn-s" onclick="loadMarketStatus()" style="padding:2px 7px;font-size:10px">🔄</button>
-      <div onclick="openOverlay('markets')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🏪 Ринки</div>
+      <div onclick="openOverlay('markets')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🏪</div>
       <div onclick="openOverlay('schedule')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🕐</div>
       <div onclick="openOverlay('settings')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">⚙</div>
     </div>
@@ -877,14 +881,37 @@ function _paintConsole() {
 
 function clearLogs() { logLines=[]; _paintConsole(); }
 
+// ── server status bar ─────────────────────────────────────────────────────────
+async function loadServerStatus() {
+  try {
+    const s = await api('/api/status');
+    const tok  = document.getElementById('sb-token');
+    const cach = document.getElementById('sb-cache');
+    const jobs = document.getElementById('sb-jobs');
+    const tim  = document.getElementById('sb-time');
+    if (tok)  tok.innerHTML  = s.token_ok
+      ? '<span style="color:var(--green)">● токен</span>'
+      : '<span style="color:var(--red)">● немає токена</span>';
+    if (cach) cach.innerHTML = s.cache_total > 0
+      ? `<span style="color:var(--sub)">📦 ${s.cache_total} лотів</span>`
+      : '<span style="color:var(--yellow)">⏳ кеш завантажується…</span>';
+    if (jobs) jobs.innerHTML = s.jobs_count > 0
+      ? `<span style="color:var(--sub)">${s.jobs_count} задач</span>`
+      : '<span style="color:var(--red)">⚠ scheduler</span>';
+    if (tim)  tim.textContent = s.server_time;
+  } catch(e) {}
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
   connectWS();
   await loadCfg();
   loadMarketStatus();
   loadTagStats();
-  setInterval(loadMarketStatus, 15000);
-  setInterval(loadTagStats, 10000);
+  loadServerStatus();
+  setInterval(loadMarketStatus,  15000);
+  setInterval(loadTagStats,      10000);
+  setInterval(loadServerStatus,   5000);
 })();
 </script>
 </body>

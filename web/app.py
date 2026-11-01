@@ -549,6 +549,34 @@ async def startup():
 
 # ─── REST endpoints ───────────────────────────────────────────────────────────
 
+@app.get("/api/status")
+def get_status():
+    now = time.time()
+    token_ok = bool(sched_mgr._token())
+    jobs = sched_mgr._sched.get_jobs()
+    engines = sched_mgr._engines
+    cache_total = sum(len(v) for v in _tag_items_cache.values())
+    markets_info = []
+    for name, eng in engines.items():
+        active_tags = [t.get("tag","") for t in eng.cfg.get("tags",[]) if t.get("tag","").strip()]
+        cd_count = sum(1 for v in eng._cooldowns.values() if v > now)
+        markets_info.append({
+            "name": name,
+            "enabled": eng.cfg.get("enabled", True),
+            "tags": active_tags,
+            "cooldowns": cd_count,
+            "cycle_tag_idx": eng._cycle_tag_idx,
+            "cycle_done": eng._cycle_done,
+        })
+    return {
+        "token_ok": token_ok,
+        "jobs_count": len(jobs),
+        "cache_total": cache_total,
+        "cache_loaded_at": _cache_loaded_at,
+        "markets": markets_info,
+        "server_time": datetime.now(_KYIV_TZ).strftime("%H:%M:%S"),
+    }
+
 class ConfigIn(BaseModel):
     data: dict
 
