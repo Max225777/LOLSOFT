@@ -780,12 +780,12 @@ def get_cooldown_stats():
     for tag, items in _tag_items_cache.items():
         total = len(items)
         item_ids = {str(it.get("item_id", "")) for it in items}
-        on_cd = 0
+        locked_ids: set[str] = set()
         for engine in sched_mgr._engines.values():
             for iid in item_ids:
                 if engine._cooldowns.get(iid, 0) > now:
-                    on_cd += 1
-            break  # same items across all engines, count once
+                    locked_ids.add(iid)
+        on_cd = len(locked_ids)
         price_sum = 0.0
         currency = ""
         for it in items:
