@@ -280,10 +280,22 @@ class LogBroadcaster:
             except ValueError:
                 pass
 
+    # ANSI colour codes for Render log viewer
+    _ANSI = {
+        "ok":    "\033[32m",   # green
+        "error": "\033[31m",   # red
+        "warn":  "\033[33m",   # yellow
+        "info":  "\033[36m",   # cyan
+    }
+    _RESET = "\033[0m"
+
     def emit(self, text: str, level: str = "info"):
         msg = {"text": text, "level": level,
                "time": datetime.now(_KYIV_TZ).strftime("%H:%M:%S")}
         self._log = (self._log + [msg])[-200:]
+        # Print to stdout so Render logs show activity
+        colour = self._ANSI.get(level, "")
+        print(f"{colour}[{msg['time']}] {text}{self._RESET}", flush=True)
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._broadcast(msg), self._loop)
 
