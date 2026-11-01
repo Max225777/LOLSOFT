@@ -436,6 +436,7 @@ class MarketEngine:
 
             if ok:
                 self._bump_idx[tag] = (idx + 1) % total
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC  # don't retry for 1h
                 broadcaster.emit(f"✅ [{name}][{tag}] {title}  ({self._cycle_done+1}/{bumps_needed})", "ok")
                 record_bump(name, tag, iid, title, True, "")
                 bumped = True
