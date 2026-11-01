@@ -611,6 +611,9 @@ class SchedulerManager:
                         broadcaster.emit(f"⚠ [stick][{tname}] {it.get('title','?')[:40]} — {reason}", "warn")
                 if stuck:
                     broadcaster.emit(f"📌 [{tname}] закріплено {stuck} лотів", "ok")
+            else:
+                if target > 0:
+                    broadcaster.emit(f"📌 [{tname}] вже {len(pinned)}/{target} закріплено, нічого не треба", "info")
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
