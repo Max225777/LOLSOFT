@@ -168,6 +168,7 @@ tr:hover td{background:#1e1e1e}
         <span id="sb-jobs"   style="font-size:10px"></span>
         <span id="sb-time"   style="font-size:10px;color:#333;margin-left:auto"></span>
       </div>
+      <button class="btn-s" onclick="restartJobs()" title="Перезапустити планувальник" style="padding:2px 7px;font-size:10px">⟳</button>
       <button class="btn-s" onclick="loadMarketStatus()" style="padding:2px 7px;font-size:10px">🔄</button>
       <div onclick="openOverlay('markets')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🏪</div>
       <div onclick="openOverlay('schedule')" style="cursor:pointer;padding:3px 9px;border-radius:5px;font-size:11px;color:var(--sub);border:1px solid var(--border)">🕐</div>
@@ -880,6 +881,14 @@ function _paintConsole() {
 }
 
 function clearLogs() { logLines=[]; _paintConsole(); }
+
+async function restartJobs() {
+  try {
+    await api('/api/restart-jobs', {method:'POST'});
+    toast('✅ Планувальник перезапущено');
+    loadServerStatus();
+  } catch(e) { toast('⛔ ' + e.message, false); }
+}
 
 // ── server status bar ─────────────────────────────────────────────────────────
 async function loadServerStatus() {

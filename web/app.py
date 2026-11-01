@@ -464,9 +464,23 @@ class MarketEngine:
 
 # ─── Scheduler manager ────────────────────────────────────────────────────────
 
+def _safe_job(fn):
+    """Wrap a scheduler job so an unhandled exception never kills the job thread."""
+    def wrapper(*args, **kwargs):
+        try:
+            fn(*args, **kwargs)
+        except Exception as e:
+            broadcaster.emit(f"⛔ Критична помилка в {fn.__name__}: {e}", "error")
+    wrapper.__name__ = fn.__name__
+    return wrapper
+
+
 class SchedulerManager:
     def __init__(self):
-        self._sched   = BackgroundScheduler(timezone="UTC")
+        self._sched   = BackgroundScheduler(
+            timezone="UTC",
+            job_defaults={"misfire_grace_time": 300, "coalesce": True, "max_instances": 1},
+        )
         self._engines: dict[str, MarketEngine] = {}
         self._cfg     = load_config()
         self._sched.start()
@@ -481,7 +495,7 @@ class SchedulerManager:
 
         # always load cache on reload and schedule hourly refresh
         threading.Thread(target=self._warmup_cache, daemon=True).start()
-        self._sched.add_job(self._warmup_cache, "interval", hours=1,
+        self._sched.add_job(_safe_job(self._warmup_cache), "interval", hours=1,
                             id="cache_refresh", replace_existing=True)
 
         if not cfg.get("autobump", False) and not cfg.get("autorefresh", False):
@@ -496,12 +510,12 @@ class SchedulerManager:
 
             if cfg.get("autorefresh", False):
                 ri = max(30, mkt.get("refresh_interval", 60))
-                self._sched.add_job(engine.refresh_tick, "interval", seconds=ri,
+                self._sched.add_job(_safe_job(engine.refresh_tick), "interval", seconds=ri,
                                     id=f"refresh_{name}", replace_existing=True)
 
             if cfg.get("autobump", False):
                 bi = max(30, mkt.get("bump_interval", 60))
-                self._sched.add_job(engine.bump_tick, "interval", seconds=bi,
+                self._sched.add_job(_safe_job(engine.bump_tick), "interval", seconds=bi,
                                     id=f"bump_{name}", replace_existing=True)
 
 
@@ -509,7 +523,9 @@ class SchedulerManager:
         global _tag_items_cache, _tag_id_map, _cache_loaded_at
         token = self._token()
         if not token:
-            broadcaster.emit("⚠ Кеш: токен не задано в налаштуваннях", "warn")
+            # Retry every 60s until token is available (e.g. env var may appear after container init)
+            broadcaster.emit("⚠ Кеш: токен не задано — повтор через 60с", "warn")
+            threading.Timer(60, self._warmup_cache).start()
             return
         try:
             broadcaster.emit("━━━ 📦 ОНОВЛЕННЯ КЕШУ ЛОТІВ ━━━", "ok")
@@ -546,6 +562,12 @@ async def startup():
     broadcaster.set_loop(asyncio.get_event_loop())
     cfg = load_config()
     sched_mgr.reload(cfg)
+
+
+@app.get("/health")
+def health():
+    """Render health check endpoint — always returns 200 if the process is alive."""
+    return {"ok": True, "time": datetime.now(_KYIV_TZ).isoformat()}
 
 # ─── REST endpoints ───────────────────────────────────────────────────────────
 
@@ -600,12 +622,24 @@ def set_config(body: ConfigIn):
     tok = cfg.get("token", "")
     if not tok or "…" in tok or tok == "****":
         cfg["token"] = old.get("token", "") or os.environ.get("LOLZ_TOKEN", "")
-    # always on
-    cfg["autobump"] = True
-    cfg["autorefresh"] = True
+
+    # If only tag_positions changed — just save, don't restart scheduler
+    _layout_only_keys = {"tag_positions"}
+    old_for_cmp = {k: v for k, v in old.items() if k not in _layout_only_keys and k != "token"}
+    new_for_cmp = {k: v for k, v in cfg.items() if k not in _layout_only_keys and k != "token"}
+    layout_only_change = (old_for_cmp == new_for_cmp)
+
+    if not layout_only_change:
+        # always on
+        cfg["autobump"] = True
+        cfg["autorefresh"] = True
+
     save_config(cfg)
-    sched_mgr.reload(cfg)
-    broadcaster.emit("⚙ Налаштування збережено", "info")
+
+    if not layout_only_change:
+        sched_mgr.reload(cfg)
+        broadcaster.emit("⚙ Налаштування збережено", "info")
+
     return {"ok": True}
 
 @app.get("/api/stats")
@@ -647,6 +681,14 @@ def get_bump_log():
 @app.post("/api/refresh-cache")
 def refresh_cache():
     threading.Thread(target=sched_mgr._warmup_cache, daemon=True).start()
+    return {"ok": True}
+
+@app.post("/api/restart-jobs")
+def restart_jobs():
+    """Reload scheduler jobs from current config (recovery without redeploy)."""
+    cfg = load_config()
+    sched_mgr.reload(cfg)
+    broadcaster.emit("🔄 Планувальник перезапущено", "info")
     return {"ok": True}
 
 @app.post("/api/refresh-tags")
