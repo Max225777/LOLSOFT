@@ -436,9 +436,9 @@ function renderTagChips() {
       chip.innerHTML = `
         <div style="display:flex;align-items:center;gap:3px;pointer-events:none;min-width:0">
           <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
-          ${priceStr ? `<span style="font-size:9px;color:#666;flex-shrink:0">${x(priceStr)}</span>` : ''}
           <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:10px;padding:0;line-height:1;flex-shrink:0;margin-left:2px" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
         </div>
+        ${priceStr ? `<div style="font-size:12px;font-weight:700;color:var(--green);pointer-events:none">${x(priceStr)}</div>` : '<div></div>'}
         <div style="pointer-events:none">
           <span class="tag-chip-count">${t.total}</span><span style="font-size:9px;color:var(--sub);margin-left:3px">лот</span>
         </div>
