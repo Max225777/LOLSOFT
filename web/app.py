@@ -476,8 +476,10 @@ class MarketEngine:
         if not bumped:
             avail = sum(1 for it in my_items if self._cooldowns.get(str(it.get("item_id", "")), 0) <= now)
             broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({api_tried} спроб, {avail}/{total} доступних)", "warn")
-
-        self._advance_cycle(active_tags)
+            # if nothing available — skip to next tag immediately instead of wasting ticks
+            self._advance_cycle(active_tags, force=(avail == 0))
+        else:
+            self._advance_cycle(active_tags)
 
     def _advance_cycle(self, active_tags: list, force: bool = False):
         _, needed = active_tags[self._cycle_tag_idx]
