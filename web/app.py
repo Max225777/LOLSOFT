@@ -19,7 +19,7 @@ from typing import Any
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -860,7 +860,8 @@ def get_cooldown_stats():
     return sorted(result, key=lambda r: r["tag"])
 
 @app.post("/api/tag-sticky")
-def set_tag_sticky(body: dict):
+async def set_tag_sticky(req: Request):
+    body   = await req.json()
     tag    = body.get("tag", "")
     target = max(0, int(body.get("target", 0)))
     if not tag:
