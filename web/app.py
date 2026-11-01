@@ -415,18 +415,23 @@ class MarketEngine:
             self._advance_cycle(active_tags, force=True)
             return
 
-        # Check if already in top-N — advance cycle and skip
+        # Check if already in top-N — put matched items on cooldown, advance cycle and skip
         if url and top_n > 0:
             try:
                 listings     = fetch_listings(url, token, top_n)
                 top_ids      = {lot["id"] for lot in listings[:top_n]}
                 my_ids       = {str(it.get("item_id", "")) for it in my_items}
-                if top_ids & my_ids:
+                matched      = top_ids & my_ids
+                if matched:
+                    now_ts = time.time()
+                    for iid in matched:
+                        self._cooldowns[iid]     = now_ts + self.ITEM_COOLDOWN_SEC
+                        self._cooldown_tags[iid] = tag
                     broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
-                    self._advance_cycle(active_tags)
+                    self._advance_cycle(active_tags, force=True)
                     return
-            except Exception:
-                pass
+            except Exception as e:
+                broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
 
         now       = time.time()
         # purge expired cooldowns to keep dict small
