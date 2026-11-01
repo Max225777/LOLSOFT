@@ -637,20 +637,19 @@ def set_config(body: ConfigIn):
     if not tok or "…" in tok or tok == "****":
         cfg["token"] = old.get("token", "") or os.environ.get("LOLZ_TOKEN", "")
 
-    # If only tag_positions changed — just save, don't restart scheduler
-    _layout_only_keys = {"tag_positions"}
-    old_for_cmp = {k: v for k, v in old.items() if k not in _layout_only_keys and k != "token"}
-    new_for_cmp = {k: v for k, v in cfg.items() if k not in _layout_only_keys and k != "token"}
-    layout_only_change = (old_for_cmp == new_for_cmp)
+    # Detect if only layout changed (tag_positions) — avoid scheduler restart
+    _sched_keys = {"autobump", "autorefresh", "markets"}
+    old_sched = {k: old.get(k) for k in _sched_keys}
+    new_sched = {k: cfg.get(k) for k in _sched_keys}
+    scheduler_changed = (old_sched != new_sched)
 
-    if not layout_only_change:
-        # always on
-        cfg["autobump"] = True
-        cfg["autorefresh"] = True
+    # always on
+    cfg["autobump"] = True
+    cfg["autorefresh"] = True
 
     save_config(cfg)
 
-    if not layout_only_change:
+    if scheduler_changed:
         sched_mgr.reload(cfg)
         broadcaster.emit("⚙ Налаштування збережено", "info")
 
