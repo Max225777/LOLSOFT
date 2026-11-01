@@ -89,9 +89,9 @@ input.wide{min-width:220px;flex:1}
 .tag-chip:active{cursor:grabbing}
 .tag-chip.drag-over{border-color:var(--accent);opacity:.7}
 .tag-chip.dragging{opacity:.35}
-.tag-chip-name{font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
-.tag-chip-count{font-size:17px;font-weight:700;color:var(--text);line-height:1}
-.tag-chip-cd{font-size:10px;color:var(--yellow)}
+.tag-chip-name{font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.tag-chip-count{font-size:20px;font-weight:700;color:var(--text);line-height:1}
+.tag-chip-cd{font-size:15px;font-weight:700;color:var(--yellow)}
 .tag-chip-cd.none{color:var(--green)}
 .tag-chip-empty{border:2px dashed #2a2a2a;border-radius:6px;transition:border-color .15s,background .15s}
 
@@ -439,10 +439,10 @@ function renderTagChips() {
           <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:10px;padding:0;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
         </div>
         <div style="flex:1;display:flex;align-items:center;pointer-events:none">
-          ${priceStr ? `<span style="font-size:14px;font-weight:700;color:var(--green)">${x(priceStr)}</span>` : '<span></span>'}
+          ${priceStr ? `<span style="font-size:17px;font-weight:700;color:var(--green)">${x(priceStr)}</span>` : '<span></span>'}
         </div>
         <div style="flex:1;display:flex;align-items:center;pointer-events:none">
-          <span class="tag-chip-cd ${cdClass}" style="font-size:13px;font-weight:700">${t.cooldown}/${t.total}</span>
+          <span class="tag-chip-cd ${cdClass}" style="font-size:15px;font-weight:700">${t.cooldown}/${t.total}</span>
         </div>`;
 
       chip.addEventListener('dragstart', e => {
