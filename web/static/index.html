@@ -191,6 +191,7 @@ tr:hover td{background:#1e1e1e}
         <span>📦 Активні лоти по тегах</span>
         <div class="spacer"></div>
         <span id="total-sum-label" style="font-size:13px;font-weight:700;color:var(--green)"></span>
+        <span id="total-sticky-label" style="font-size:13px;font-weight:700;color:var(--accent);margin-left:8px"></span>
         <span style="font-size:10px;color:var(--sub)">🕐 = кулдаун</span>
         <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
       </div>
@@ -337,6 +338,14 @@ const GRID_COLS = 5;
 function getHidden()     { try { return JSON.parse(localStorage.getItem('tagHidden') || '[]'); } catch(_) { return []; } }
 function saveHidden(h)   { try { localStorage.setItem('tagHidden', JSON.stringify(h)); } catch(_) {} }
 
+async function setSticky(tag, delta) {
+  const t = _lastTagData.find(d => d.tag === tag);
+  const current = (t && t.sticky_target) || 0;
+  const target = Math.max(0, current + delta);
+  await api('/api/tag-sticky', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tag, target})});
+  await loadTagStats();
+}
+
 function hideTag(tag) {
   const h = getHidden();
   if (!h.includes(tag)) { h.push(tag); saveHidden(h); }
@@ -389,6 +398,10 @@ function renderTagChips() {
   const currency = visible.find(t => t.currency)?.currency || '';
   const sumEl = document.getElementById('total-sum-label');
   if (sumEl) sumEl.textContent = totalSum > 0 ? `Σ ${fmtPrice(totalSum)} ${currency}` : '';
+  const totalStickyCurrent = visible.reduce((s, t) => s + (t.sticky_current || 0), 0);
+  const totalStickyTarget  = visible.reduce((s, t) => s + (t.sticky_target  || 0), 0);
+  const stickyEl = document.getElementById('total-sticky-label');
+  if (stickyEl) stickyEl.textContent = totalStickyTarget > 0 ? `📌 ${totalStickyCurrent}/${totalStickyTarget}` : '';
 
   const positions = getTagPositions(); // {tag: cellIndex}
 
@@ -446,6 +459,12 @@ function renderTagChips() {
           ${priceStr ? `<div class="tag-chip-price">${x(priceStr)}</div>` : '<div></div>'}
           <div style="display:flex;align-items:baseline;gap:1px">
             <span style="font-size:16px;font-weight:700;color:${t.cooldown>0?'var(--yellow)':'var(--green)'}">${t.cooldown}</span><span style="font-size:12px;color:#555;font-weight:600;margin:0 1px">/</span><span style="font-size:16px;font-weight:700;color:var(--green)">${t.total}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:4px;pointer-events:auto">
+            <span style="font-size:11px;color:#888">📌</span>
+            <button onclick="event.stopPropagation();setSticky('${x(t.tag)}',-1)" style="background:#1a1a1a;border:1px solid #333;color:#aaa;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;line-height:1;padding:0">−</button>
+            <span style="font-size:13px;font-weight:700;color:${t.sticky_current>0?'var(--accent)':'#555'};min-width:28px;text-align:center">${t.sticky_current||0}/${t.sticky_target||0}</span>
+            <button onclick="event.stopPropagation();setSticky('${x(t.tag)}',+1)" style="background:#1a1a1a;border:1px solid #333;color:#aaa;width:18px;height:18px;border-radius:3px;cursor:pointer;font-size:12px;line-height:1;padding:0">+</button>
           </div>
         </div>`;
 

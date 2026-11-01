@@ -167,6 +167,20 @@ _cache_loaded_at: str = ""
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
 
+def stick_item(token: str, item_id: str) -> tuple[bool, str]:
+    try:
+        resp = requests.post(f"{API_BASE}/{item_id}/stick",
+                             headers=_headers(token), timeout=15)
+        if resp.status_code in (200, 201):
+            return True, ""
+        try:
+            msg = resp.json().get("message") or resp.json().get("error") or ""
+        except Exception:
+            msg = resp.text[:80]
+        return False, f"[{resp.status_code}] {msg[:80]}"
+    except Exception as e:
+        return False, str(e)[:80]
+
 def bump_item(token: str, item_id: str) -> tuple[bool, str]:
     try:
         resp = requests.post(f"{API_BASE}/{item_id}/bump",
@@ -574,6 +588,28 @@ class SchedulerManager:
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(
                 f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
+            # auto-stick: pin items per tag up to sticky_count target
+            cfg = load_config()
+            tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
+            for tname, titems in cache.items():
+                target = tag_sticky.get(tname, 0)
+                if target <= 0:
+                    continue
+                pinned  = [it for it in titems if it.get("is_pinned")]
+                to_pin  = target - len(pinned)
+                if to_pin <= 0:
+                    continue
+                candidates = [it for it in titems if not it.get("is_pinned")]
+                stuck = 0
+                for it in candidates[:to_pin]:
+                    ok, reason = stick_item(token, str(it.get("item_id", "")))
+                    if ok:
+                        it["is_pinned"] = True
+                        stuck += 1
+                    else:
+                        broadcaster.emit(f"⚠ [stick][{tname}] {it.get('title','?')[:40]} — {reason}", "warn")
+                if stuck:
+                    broadcaster.emit(f"📌 [{tname}] закріплено {stuck} лотів", "ok")
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
@@ -790,6 +826,8 @@ def market_status():
 @app.get("/api/cooldown-stats")
 def get_cooldown_stats():
     now = time.time()
+    cfg = load_config()
+    tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
     result = []
     for tag, items in _tag_items_cache.items():
         total = len(items)
@@ -801,6 +839,7 @@ def get_cooldown_stats():
             )
         price_sum = 0.0
         currency = ""
+        sticky_current = sum(1 for it in items if it.get("is_pinned"))
         for it in items:
             try:
                 price_sum += float(it.get("price", 0) or 0)
@@ -811,8 +850,23 @@ def get_cooldown_stats():
         result.append({
             "tag": tag, "total": total, "cooldown": on_cd,
             "price_sum": round(price_sum, 2), "currency": currency,
+            "sticky_current": sticky_current,
+            "sticky_target": tag_sticky.get(tag, 0),
         })
     return sorted(result, key=lambda r: r["tag"])
+
+@app.post("/api/tag-sticky")
+def set_tag_sticky(body: dict):
+    tag    = body.get("tag", "")
+    target = max(0, int(body.get("target", 0)))
+    if not tag:
+        raise HTTPException(400, "tag required")
+    cfg = load_config()
+    tag_sticky = cfg.get("tag_sticky", {})
+    tag_sticky[tag] = target
+    cfg["tag_sticky"] = tag_sticky
+    save_config(cfg)
+    return {"ok": True, "tag": tag, "target": target}
 
 @app.post("/api/bump-now/{market_name}")
 def bump_now(market_name: str):
