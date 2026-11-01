@@ -186,7 +186,7 @@ tr:hover td{background:#1e1e1e}
       <div id="tag-stats-header">
         <span>📦 Активні лоти по тегах</span>
         <div class="spacer"></div>
-        <span id="total-sum-label" style="font-size:11px;font-weight:400;color:var(--sub)"></span>
+        <span id="total-sum-label" style="font-size:13px;font-weight:700;color:var(--green)"></span>
         <span style="font-size:10px;color:var(--sub)">🕐 = кулдаун</span>
         <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
       </div>
@@ -237,7 +237,7 @@ async function api(url, opts={}) {
 }
 
 function x(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function fmtPrice(n){ return n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'')+'k' : Math.round(n).toString(); }
+function fmtPrice(n){ return Number(n).toFixed(2).replace(/\.00$/,''); }
 
 function toast(msg, ok=true) {
   const el = document.getElementById('toast');
