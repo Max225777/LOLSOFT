@@ -418,13 +418,10 @@ class MarketEngine:
         start_idx = self._bump_idx.get(tag, 0) % total
         bumped    = False
 
-        MAX_API_TRIES = 10   # max real API calls per tick (same as desktop app)
-        api_tried     = 0
-        scan_limit    = total  # scan all items to find non-cooled ones
+        api_tried  = 0
+        scan_limit = total  # try all items until one bumps
 
         for scan in range(scan_limit):
-            if api_tried >= MAX_API_TRIES:
-                break
             idx = (start_idx + scan) % total
             it  = my_items[idx]
             iid = str(it.get("item_id", ""))
@@ -435,7 +432,7 @@ class MarketEngine:
 
             title = it.get("title") or it.get("title_en") or f"#{iid}"
             ok, reason = bump_item(token, iid)
-            api_tried += 1
+            api_tried += 1  # count actual API calls (no hard cap)
 
             if ok:
                 self._bump_idx[tag] = (idx + 1) % total
