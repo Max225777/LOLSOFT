@@ -415,6 +415,12 @@ class MarketEngine:
                 pass
 
         now       = time.time()
+        # purge expired cooldowns to keep dict small
+        expired = [k for k, v in self._cooldowns.items() if v <= now]
+        for k in expired:
+            del self._cooldowns[k]
+            self._cooldown_tags.pop(k, None)
+
         total     = len(my_items)
         start_idx = self._bump_idx.get(tag, 0) % total
         bumped    = False
