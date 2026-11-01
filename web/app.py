@@ -293,9 +293,11 @@ class LogBroadcaster:
         msg = {"text": text, "level": level,
                "time": datetime.now(_KYIV_TZ).strftime("%H:%M:%S")}
         self._log = (self._log + [msg])[-200:]
-        # Print to stdout so Render logs show activity
-        colour = self._ANSI.get(level, "")
-        print(f"{colour}[{msg['time']}] {text}{self._RESET}", flush=True)
+        # Print to stdout for Render logs — skip noise (same filter as UI console)
+        _noise = ("— ліміт, кулдаун", "не вдалось підняти", "⏰", "🔄")
+        if not any(n in text for n in _noise):
+            colour = self._ANSI.get(level, "")
+            print(f"{colour}[{msg['time']}] {text}{self._RESET}", flush=True)
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._broadcast(msg), self._loop)
 
