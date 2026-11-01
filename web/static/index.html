@@ -85,15 +85,15 @@ input.wide{min-width:220px;flex:1}
 .stat-lbl{font-size:10px;color:var(--sub);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
 
 /* tag chip */
-.tag-chip{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;justify-content:space-between;height:80px;cursor:grab;user-select:none;transition:opacity .15s,border-color .15s;overflow:hidden}
+.tag-chip{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px;display:flex;flex-direction:column;justify-content:space-between;cursor:grab;user-select:none;transition:opacity .15s,border-color .15s;overflow:hidden}
 .tag-chip:active{cursor:grabbing}
 .tag-chip.drag-over{border-color:var(--accent);opacity:.7}
 .tag-chip.dragging{opacity:.35}
-.tag-chip-name{font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tag-chip-count{font-size:15px;font-weight:700;color:var(--text)}
+.tag-chip-name{font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.tag-chip-count{font-size:17px;font-weight:700;color:var(--text);line-height:1}
 .tag-chip-cd{font-size:10px;color:var(--yellow)}
 .tag-chip-cd.none{color:var(--green)}
-.tag-chip-empty{border:2px dashed #2a2a2a;border-radius:6px;height:80px;transition:border-color .15s,background .15s}
+.tag-chip-empty{border:2px dashed #2a2a2a;border-radius:6px;transition:border-color .15s,background .15s}
 
 /* market status cards */
 .mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px}
@@ -186,7 +186,7 @@ tr:hover td{background:#1e1e1e}
       <div id="tag-stats-header">
         <span>📦 Активні лоти по тегах</span>
         <div class="spacer"></div>
-        <span id="total-sum-label" style="font-size:12px;font-weight:700;color:var(--accent)"></span>
+        <span id="total-sum-label" style="font-size:11px;font-weight:400;color:var(--sub)"></span>
         <span style="font-size:10px;color:var(--sub)">🕐 = кулдаун</span>
         <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
       </div>
@@ -413,6 +413,14 @@ function renderTagChips() {
   CFG.tag_positions = positions;
 
   el.innerHTML = '';
+  // Make chips square after layout — read cell width from container
+  const _squareChips = () => {
+    const first = el.querySelector('.tag-chip,.tag-chip-empty');
+    if (!first) return;
+    const w = first.offsetWidth;
+    if (w > 0) el.querySelectorAll('.tag-chip,.tag-chip-empty').forEach(c => c.style.height = w + 'px');
+  };
+  requestAnimationFrame(_squareChips);
 
   for (let i = 0; i < totalCells; i++) {
     const t = cellMap[i];
@@ -424,15 +432,15 @@ function renderTagChips() {
       chip.dataset.cell = i;
       const cdClass = t.cooldown > 0 ? '' : 'none';
       const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
-      const priceStr = t.price_sum > 0 ? `${fmtPrice(t.price_sum)} ${t.currency||''}`.trim() : '';
+      const priceStr = t.price_sum > 0 ? `${fmtPrice(t.price_sum)}${t.currency||'$'}` : '';
       chip.innerHTML = `
-        <div style="display:flex;align-items:center;gap:3px;pointer-events:none">
-          <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
-          <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#555;cursor:pointer;font-size:10px;padding:0 1px;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#555'">✕</button>
+        <div style="display:flex;align-items:center;gap:3px;pointer-events:none;min-width:0">
+          <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
+          ${priceStr ? `<span style="font-size:9px;color:#666;flex-shrink:0">${x(priceStr)}</span>` : ''}
+          <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:10px;padding:0;line-height:1;flex-shrink:0;margin-left:2px" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
         </div>
-        <div style="display:flex;align-items:baseline;gap:5px;pointer-events:none">
-          <span class="tag-chip-count">${t.total}</span><span style="font-size:9px;color:var(--sub)">лот</span>
-          ${priceStr ? `<span style="font-size:10px;color:var(--yellow);margin-left:auto">${x(priceStr)}</span>` : ''}
+        <div style="pointer-events:none">
+          <span class="tag-chip-count">${t.total}</span><span style="font-size:9px;color:var(--sub);margin-left:3px">лот</span>
         </div>
         <div class="tag-chip-cd ${cdClass}" style="pointer-events:none">${cdText}</div>`;
 
