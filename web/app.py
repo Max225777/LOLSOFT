@@ -595,11 +595,12 @@ class SchedulerManager:
                 target = tag_sticky.get(tname, 0)
                 if target <= 0:
                     continue
-                pinned  = [it for it in titems if it.get("is_pinned")]
+                def _is_pinned(it): return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
+                pinned  = [it for it in titems if _is_pinned(it)]
                 to_pin  = target - len(pinned)
                 if to_pin <= 0:
                     continue
-                candidates = [it for it in titems if not it.get("is_pinned")]
+                candidates = [it for it in titems if not _is_pinned(it)]
                 stuck = 0
                 for it in candidates[:to_pin]:
                     ok, reason = stick_item(token, str(it.get("item_id", "")))
@@ -839,7 +840,7 @@ def get_cooldown_stats():
             )
         price_sum = 0.0
         currency = ""
-        sticky_current = sum(1 for it in items if it.get("is_pinned"))
+        sticky_current = sum(1 for it in items if it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
         for it in items:
             try:
                 price_sum += float(it.get("price", 0) or 0)
