@@ -434,15 +434,16 @@ function renderTagChips() {
       const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
       const priceStr = t.price_sum > 0 ? `${fmtPrice(t.price_sum)}${t.currency||'$'}` : '';
       chip.innerHTML = `
-        <div style="display:flex;align-items:center;gap:3px;pointer-events:none;min-width:0">
-          <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
-          <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:10px;padding:0;line-height:1;flex-shrink:0;margin-left:2px" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
+        <div style="display:flex;align-items:center;gap:2px;pointer-events:none;min-width:0;flex:1">
+          <div class="tag-chip-name" title="${x(t.tag)}" style="flex:1">${x(t.tag)}</div>
+          <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:10px;padding:0;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
         </div>
-        ${priceStr ? `<div style="font-size:12px;font-weight:700;color:var(--green);pointer-events:none">${x(priceStr)}</div>` : '<div></div>'}
-        <div style="pointer-events:none">
-          <span class="tag-chip-count">${t.total}</span><span style="font-size:9px;color:var(--sub);margin-left:3px">лот</span>
+        <div style="flex:1;display:flex;align-items:center;pointer-events:none">
+          ${priceStr ? `<span style="font-size:14px;font-weight:700;color:var(--green)">${x(priceStr)}</span>` : '<span></span>'}
         </div>
-        <div class="tag-chip-cd ${cdClass}" style="pointer-events:none">${cdText}</div>`;
+        <div style="flex:1;display:flex;align-items:center;pointer-events:none">
+          <span class="tag-chip-cd ${cdClass}" style="font-size:13px;font-weight:700">${t.cooldown}/${t.total}</span>
+        </div>`;
 
       chip.addEventListener('dragstart', e => {
         e.dataTransfer.effectAllowed = 'move';
