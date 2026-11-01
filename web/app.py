@@ -794,7 +794,9 @@ def get_cooldown_stats():
             try:
                 price_sum += float(it.get("price", 0) or 0)
                 if not currency:
-                    currency = it.get("price_currency", "") or it.get("currency", "") or ""
+                    raw_cur = (it.get("price_currency", "") or it.get("currency", "") or "").upper()
+                    # LZT always prices in RUB regardless of field value
+                    currency = "₽"
             except (TypeError, ValueError):
                 pass
         result.append({
