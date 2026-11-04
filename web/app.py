@@ -539,8 +539,8 @@ class MarketEngine:
 
         # unpin oldest if at or above target (and bumped item not already pinned)
         if not already_pinned and len(pinned) >= target:
-            # oldest = first in list that is pinned (cache order = listing order)
-            oldest = pinned[0]
+            # oldest = pinned item with smallest bumped_at (least recently bumped)
+            oldest = min(pinned, key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0)
             old_id = str(oldest.get("item_id", ""))
             ok_u, err_u = unstick_item(token, old_id)
             if ok_u:
