@@ -481,6 +481,8 @@ class MarketEngine:
                 self._bump_idx[tag] = (idx + 1) % total
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                 self._cooldown_tags[iid] = tag
+                # update bumped_at in cache so rotation picks correct oldest
+                it["bumped_at"] = int(now)
                 broadcaster.emit(f"✅ [{name}][{tag}] {title}  ({self._cycle_done+1}/{bumps_needed})", "ok")
                 record_bump(name, tag, iid, title, True, "")
                 bumped = True
@@ -527,7 +529,7 @@ class MarketEngine:
             self._cycle_done    = 0
 
     def _auto_stick_after_bump(self, token: str, name: str, tag: str, iid: str, it: dict):
-        """After a successful bump, pin the bumped item and unpin the oldest if over target."""
+        """After a successful bump, pin the bumped item and rotate oldest pinned out."""
         cfg = load_config()
         target = cfg.get("tag_sticky", {}).get(tag, 0)
         if target <= 0:
@@ -537,18 +539,28 @@ class MarketEngine:
         pinned = [x for x in tag_items if _is_pinned(x)]
         already_pinned = any(str(x.get("item_id", "")) == iid for x in pinned)
 
-        # unpin oldest if at or above target (and bumped item not already pinned)
-        if not already_pinned and len(pinned) >= target:
-            # oldest = pinned item with smallest bumped_at (least recently bumped)
-            oldest = min(pinned, key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0)
-            old_id = str(oldest.get("item_id", ""))
-            ok_u, err_u = unstick_item(token, old_id)
-            if ok_u:
-                oldest["is_pinned"] = False
-                oldest["is_sticky"] = False
-                broadcaster.emit(f"📌 [{name}][{tag}] знято закріплення: {oldest.get('title','?')[:40]}", "info")
-            else:
-                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти закріплення {old_id}: {err_u}", "warn")
+        # how many slots to free up:
+        # if not already pinned → need 1 free slot; if already pinned → no new slot needed
+        free_needed = 0 if already_pinned else 1
+        # also free any excess over target (e.g. target was lowered)
+        excess = len(pinned) - target
+        to_unpin_count = max(free_needed + excess, 0) if not already_pinned else max(excess, 0)
+
+        if to_unpin_count > 0:
+            # sort pinned by bumped_at ascending (oldest first), exclude the just-bumped item
+            candidates = sorted(
+                [x for x in pinned if str(x.get("item_id", "")) != iid],
+                key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0
+            )
+            for oldest in candidates[:to_unpin_count]:
+                old_id = str(oldest.get("item_id", ""))
+                ok_u, err_u = unstick_item(token, old_id)
+                if ok_u:
+                    oldest["is_pinned"] = False
+                    oldest["is_sticky"] = False
+                    broadcaster.emit(f"📌 [{name}][{tag}] знято: {oldest.get('title','?')[:40]}", "info")
+                else:
+                    broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
 
         # pin the just-bumped item
         if not already_pinned:
@@ -556,7 +568,7 @@ class MarketEngine:
             if ok_s:
                 it["is_pinned"] = True
                 it["is_sticky"] = True
-                broadcaster.emit(f"📌 [{name}][{tag}] закріплено після підняття: {it.get('title','?')[:40]}", "ok")
+                broadcaster.emit(f"📌 [{name}][{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
             else:
                 broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {iid}: {err_s}", "warn")
 
