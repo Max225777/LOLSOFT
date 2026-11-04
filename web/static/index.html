@@ -821,7 +821,7 @@ async function loadListings() {
       const cls = l.is_mine?'mine':'other';
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${i+1}</td>
-        <td><a href="${l.link}" target="_blank" class="${cls}">${x(l.title)}</a></td>
+        <td><a href="${l.link}" target="_blank" class="${cls}">${l.is_pinned?'📌 ':''}${x(l.title)}</a></td>
         <td class="${cls}">${x(l.seller)}</td>
         <td>${x(l.price)}</td>
         <td style="font-size:10px;color:var(--sub)">${l.bumped_at||''}</td>
