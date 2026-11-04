@@ -100,12 +100,13 @@ input.wide{min-width:220px;flex:1}
 .tag-chip-empty{border:1px dashed #2d2d2d;border-radius:8px;transition:border-color .15s,background .15s}
 
 /* market status cards */
-.mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px}
+#status-list{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;min-width:0}
 .mkt-status-card.on{border-left:3px solid var(--green)}
 .mkt-status-card.off{border-left:3px solid var(--border);opacity:.6}
 .mkt-status-card.wait{border-left:3px solid var(--yellow)}
 .mkt-head-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.mkt-title{font-size:13px;font-weight:700}
+.mkt-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 
 /* listings mini table */
 .lst-table{width:100%;border-collapse:collapse;font-size:11px}
