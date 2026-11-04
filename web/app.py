@@ -358,11 +358,13 @@ class MarketEngine:
     def __init__(self, cfg: dict, token_fn):
         self.cfg          = cfg
         self.token_fn     = token_fn  # callable → str
-        self._bump_idx:     dict[str, int]   = {}   # tag → next item index
-        self._cooldowns:    dict[str, float] = {}   # item_id → expires_at
-        self._cooldown_tags: dict[str, str]  = {}   # item_id → tag_name
-        self._cycle_tag_idx: int = 0             # current tag index in active_tags
-        self._cycle_done:    int = 0             # bumps done for current tag this cycle
+        self._bump_idx:      dict[str, int]   = {}   # tag → next item index
+        self._cooldowns:     dict[str, float] = {}   # item_id → expires_at
+        self._cooldown_tags: dict[str, str]   = {}   # item_id → tag_name
+        self._cycle_tag_idx: int = 0
+        self._cycle_done:    int = 0
+        self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
+        self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
 
     def get_token(self) -> str:
         return self.token_fn()
@@ -394,6 +396,14 @@ class MarketEngine:
             broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
 
     def bump_tick(self):
+        if not self._bump_lock.acquire(blocking=False):
+            return  # previous tick still running, skip
+        try:
+            self._bump_tick_inner()
+        finally:
+            self._bump_lock.release()
+
+    def _bump_tick_inner(self):
         if not self.cfg.get("enabled", True):
             return
         if not self._is_active_hours():
@@ -548,17 +558,27 @@ class MarketEngine:
 
         if to_unpin_count > 0:
             # sort pinned by bumped_at ascending (oldest first), exclude the just-bumped item
+            # and items that previously returned 403 (can't be unstuck)
             candidates = sorted(
-                [x for x in pinned if str(x.get("item_id", "")) != iid],
+                [x for x in pinned
+                 if str(x.get("item_id", "")) != iid
+                 and str(x.get("item_id", "")) not in self._unstick_blocked],
                 key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0
             )
-            for oldest in candidates[:to_unpin_count]:
+            removed = 0
+            for oldest in candidates:
+                if removed >= to_unpin_count:
+                    break
                 old_id = str(oldest.get("item_id", ""))
                 ok_u, err_u = unstick_item(token, old_id)
                 if ok_u:
                     oldest["is_pinned"] = False
                     oldest["is_sticky"] = False
                     broadcaster.emit(f"📌 [{name}][{tag}] знято: {oldest.get('title','?')[:40]}", "info")
+                    removed += 1
+                elif "[403]" in err_u:
+                    self._unstick_blocked.add(old_id)
+                    broadcaster.emit(f"⚠ [{name}][{tag}] {old_id} заблоковано для зняття (403), пропуск", "warn")
                 else:
                     broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
 
