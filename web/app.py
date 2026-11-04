@@ -520,6 +520,9 @@ class MarketEngine:
             else:
                 broadcaster.emit(f"⛔ [{name}][{tag}] {title} — {reason}", "error")
                 record_bump(name, tag, iid, title, False, reason)
+                # 5xx = server down, stop scanning immediately (no point trying more items)
+                if any(reason.startswith(f"[{c}]") for c in ("500","502","503","504")):
+                    break
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                 self._cooldown_tags[iid] = tag
 
