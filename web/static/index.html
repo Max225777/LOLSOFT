@@ -568,8 +568,8 @@ async function renderMarketsOverlay(body) {
     <div class="card-hd">Лоти: <span id="lst-name" style="color:var(--accent)"></span></div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>Піднято</th><th>Мій</th></tr></thead>
-        <tbody id="lst-body"><tr><td colspan="6" style="color:var(--sub);text-align:center;padding:20px">Оберіть ринок →</td></tr></tbody>
+        <thead><tr><th>#</th><th>Назва</th><th>Продавець</th><th>Ціна</th><th>📌</th><th>Піднято</th><th>Мій</th></tr></thead>
+        <tbody id="lst-body"><tr><td colspan="7" style="color:var(--sub);text-align:center;padding:20px">Оберіть ринок →</td></tr></tbody>
       </table>
     </div>`;
   body.appendChild(listingsCard);
@@ -813,7 +813,7 @@ async function loadListings() {
   if (nameEl) nameEl.textContent = name;
   const tb = document.getElementById('lst-body');
   if (!tb) return;
-  tb.innerHTML = '<tr><td colspan="6" style="color:var(--sub);text-align:center">Завантаження…</td></tr>';
+  tb.innerHTML = '<tr><td colspan="7" style="color:var(--sub);text-align:center">Завантаження…</td></tr>';
   try {
     const data = await api('/api/market-listings/'+encodeURIComponent(name));
     tb.innerHTML = '';
@@ -821,15 +821,16 @@ async function loadListings() {
       const cls = l.is_mine?'mine':'other';
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${i+1}</td>
-        <td><a href="${l.link}" target="_blank" class="${cls}">${l.is_pinned?'📌 ':''}${x(l.title)}</a></td>
+        <td><a href="${l.link}" target="_blank" class="${cls}">${x(l.title)}</a></td>
         <td class="${cls}">${x(l.seller)}</td>
         <td>${x(l.price)}</td>
+        <td style="text-align:center">${l.is_pinned?'📌':''}</td>
         <td style="font-size:10px;color:var(--sub)">${l.bumped_at||''}</td>
         <td>${l.is_mine?'✓':''}</td>`;
       tb.appendChild(tr);
     });
   } catch(e) {
-    tb.innerHTML = `<tr><td colspan="6" style="color:var(--red)">Помилка: ${e.message}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="7" style="color:var(--red)">Помилка: ${e.message}</td></tr>`;
   }
 }
 
