@@ -181,6 +181,23 @@ def stick_item(token: str, item_id: str) -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)[:80]
 
+def unstick_item(token: str, item_id: str) -> tuple[bool, str]:
+    try:
+        resp = requests.delete(f"{API_BASE}/{item_id}/stick",
+                               headers=_headers(token), timeout=15)
+        if resp.status_code in (200, 204):
+            return True, ""
+        try:
+            msg = resp.json().get("message") or resp.json().get("error") or ""
+        except Exception:
+            msg = resp.text[:80]
+        return False, f"[{resp.status_code}] {msg[:80]}"
+    except Exception as e:
+        return False, str(e)[:80]
+
+def _is_pinned(it: dict) -> bool:
+    return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
+
 def bump_item(token: str, item_id: str) -> tuple[bool, str]:
     try:
         resp = requests.post(f"{API_BASE}/{item_id}/bump",
@@ -467,6 +484,8 @@ class MarketEngine:
                 broadcaster.emit(f"✅ [{name}][{tag}] {title}  ({self._cycle_done+1}/{bumps_needed})", "ok")
                 record_bump(name, tag, iid, title, True, "")
                 bumped = True
+                # ── auto-stick after bump ──────────────────────────────────
+                self._auto_stick_after_bump(token, name, tag, iid, it)
                 break
 
             elif reason.startswith("продано/видалено"):
@@ -506,6 +525,40 @@ class MarketEngine:
         if force or self._cycle_done >= needed:
             self._cycle_tag_idx = (self._cycle_tag_idx + 1) % len(active_tags)
             self._cycle_done    = 0
+
+    def _auto_stick_after_bump(self, token: str, name: str, tag: str, iid: str, it: dict):
+        """After a successful bump, pin the bumped item and unpin the oldest if over target."""
+        cfg = load_config()
+        target = cfg.get("tag_sticky", {}).get(tag, 0)
+        if target <= 0:
+            return
+
+        tag_items = items_for_tag(tag)
+        pinned = [x for x in tag_items if _is_pinned(x)]
+        already_pinned = any(str(x.get("item_id", "")) == iid for x in pinned)
+
+        # unpin oldest if at or above target (and bumped item not already pinned)
+        if not already_pinned and len(pinned) >= target:
+            # oldest = first in list that is pinned (cache order = listing order)
+            oldest = pinned[0]
+            old_id = str(oldest.get("item_id", ""))
+            ok_u, err_u = unstick_item(token, old_id)
+            if ok_u:
+                oldest["is_pinned"] = False
+                oldest["is_sticky"] = False
+                broadcaster.emit(f"📌 [{name}][{tag}] знято закріплення: {oldest.get('title','?')[:40]}", "info")
+            else:
+                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти закріплення {old_id}: {err_u}", "warn")
+
+        # pin the just-bumped item
+        if not already_pinned:
+            ok_s, err_s = stick_item(token, iid)
+            if ok_s:
+                it["is_pinned"] = True
+                it["is_sticky"] = True
+                broadcaster.emit(f"📌 [{name}][{tag}] закріплено після підняття: {it.get('title','?')[:40]}", "ok")
+            else:
+                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {iid}: {err_s}", "warn")
 
 # ─── Scheduler manager ────────────────────────────────────────────────────────
 
@@ -600,7 +653,6 @@ class SchedulerManager:
                 target = tag_sticky.get(tname, 0)
                 if target <= 0:
                     continue
-                def _is_pinned(it): return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
                 pinned  = [it for it in titems if _is_pinned(it)]
                 to_pin  = target - len(pinned)
                 if to_pin <= 0:
@@ -848,7 +900,7 @@ def get_cooldown_stats():
             )
         price_sum = 0.0
         currency = ""
-        sticky_current = sum(1 for it in items if it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
+        sticky_current = sum(1 for it in items if _is_pinned(it))
         for it in items:
             try:
                 price_sum += float(it.get("price", 0) or 0)
