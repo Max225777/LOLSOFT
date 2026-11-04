@@ -35,7 +35,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* tag stats */
 #tag-stats-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 #tag-stats-header{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--border);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px}
-#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;align-content:start;align-items:start}
+#tag-stats-body{flex:1;overflow-y:auto;padding:8px 10px;display:grid;grid-template-columns:repeat(6,1fr);gap:6px;align-content:start;align-items:start}
 .tag-chip-empty.drag-over{border-color:var(--accent);background:#1a2a10}
 
 /* console */
@@ -100,13 +100,12 @@ input.wide{min-width:220px;flex:1}
 .tag-chip-empty{border:1px dashed #2d2d2d;border-radius:8px;transition:border-color .15s,background .15s}
 
 /* market status cards */
-#status-list{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
-.mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;min-width:0}
+.mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px}
 .mkt-status-card.on{border-left:3px solid var(--green)}
 .mkt-status-card.off{border-left:3px solid var(--border);opacity:.6}
 .mkt-status-card.wait{border-left:3px solid var(--yellow)}
 .mkt-head-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.mkt-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mkt-title{font-size:13px;font-weight:700}
 
 /* listings mini table */
 .lst-table{width:100%;border-collapse:collapse;font-size:11px}
@@ -334,7 +333,7 @@ function buildStatusCard(m) {
 }
 
 // ── tag grid positions + hidden ────────────────────────────────────────────────
-const GRID_COLS = 5;
+const GRID_COLS = 6;
 
 function getHidden()     { try { return JSON.parse(localStorage.getItem('tagHidden') || '[]'); } catch(_) { return []; } }
 function saveHidden(h)   { try { localStorage.setItem('tagHidden', JSON.stringify(h)); } catch(_) {} }
