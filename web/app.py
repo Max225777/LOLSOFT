@@ -658,50 +658,6 @@ class SchedulerManager:
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(
                 f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
-            # auto-stick: sync pinned count to target for every tag
-            cfg = load_config()
-            tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
-            for tname, titems in cache.items():
-                target = tag_sticky.get(tname, 0)
-                pinned = [it for it in titems if _is_pinned(it)]
-
-                # unpin excess (pinned > target, or target == 0)
-                excess = len(pinned) - target
-                if excess > 0:
-                    to_remove = sorted(pinned, key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0)
-                    removed = 0
-                    for old in to_remove[:excess]:
-                        old_id = str(old.get("item_id", ""))
-                        ok_u, err_u = unstick_item(token, old_id)
-                        if ok_u:
-                            old["is_pinned"] = False
-                            old["is_sticky"] = False
-                            removed += 1
-                        else:
-                            broadcaster.emit(f"⚠ [unstick][{tname}] {old.get('title','?')[:40]} — {err_u}", "warn")
-                    if removed:
-                        broadcaster.emit(f"📌 [{tname}] знято {removed} зайвих закріплень ({len(pinned)}→{target})", "info")
-
-                if target <= 0:
-                    continue
-
-                # pin missing (pinned < target)
-                pinned = [it for it in titems if _is_pinned(it)]  # re-read after removals
-                to_pin = target - len(pinned)
-                if to_pin <= 0:
-                    broadcaster.emit(f"📌 [{tname}] вже {len(pinned)}/{target} закріплено", "info")
-                    continue
-                candidates = [it for it in titems if not _is_pinned(it)]
-                stuck = 0
-                for it in candidates[:to_pin]:
-                    ok, reason = stick_item(token, str(it.get("item_id", "")))
-                    if ok:
-                        it["is_pinned"] = True
-                        stuck += 1
-                    else:
-                        broadcaster.emit(f"⚠ [stick][{tname}] {it.get('title','?')[:40]} — {reason}", "warn")
-                if stuck:
-                    broadcaster.emit(f"📌 [{tname}] закріплено {stuck} лотів", "ok")
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
