@@ -308,10 +308,11 @@ function buildStatusCard(m) {
         <td style="max-width:180px"><a href="${x(l.link||'')}" target="_blank" style="color:${color}">${x(l.title||'')}</a></td>
         <td style="color:${color}">${x(l.seller||'')}</td>
         <td style="color:var(--sub)">${x(l.price||'')}</td>
+        <td style="text-align:center;width:20px">${l.is_pinned?'📌':''}</td>
       </tr>`;
     }).join('');
   } else {
-    rows = '<tr><td colspan="4" style="color:var(--sub);text-align:center;padding:8px">Немає даних</td></tr>';
+    rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:8px">Немає даних</td></tr>';
   }
 
   div.innerHTML = `
@@ -324,7 +325,7 @@ function buildStatusCard(m) {
     </div>
     <div style="overflow-x:auto">
       <table class="lst-table">
-        <thead><tr><th>#</th><th>Лот</th><th>Продавець</th><th>Ціна</th></tr></thead>
+        <thead><tr><th>#</th><th>Лот</th><th>Продавець</th><th>Ціна</th><th>📌</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
