@@ -414,16 +414,13 @@ class MarketEngine:
     def _bump_tick_inner(self, manual: bool = False):
         if not self.cfg.get("enabled", True):
             return
-        in_hours = self._is_active_hours()
-        if not in_hours:
-            if not manual:
-                if not self._logged_off_hours:
-                    name = self.cfg.get("name","?")
-                    broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
-                    self._logged_off_hours = True
-                return
-        else:
-            self._logged_off_hours = False
+        if not self._is_active_hours() and not manual:
+            if not self._logged_off_hours:
+                name = self.cfg.get("name","?")
+                broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
+                self._logged_off_hours = True
+            return
+        self._logged_off_hours = False
 
         token = self.get_token()
         if not token:
