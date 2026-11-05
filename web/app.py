@@ -407,19 +407,22 @@ class MarketEngine:
                 broadcaster.emit("⚠ Ручний бамп: не вдалось отримати лок за 30с", "warn")
             return
         try:
-            self._bump_tick_inner()
+            self._bump_tick_inner(manual=manual)
         finally:
             self._bump_lock.release()
 
-    def _bump_tick_inner(self):
+    def _bump_tick_inner(self, manual: bool = False):
         if not self.cfg.get("enabled", True):
             return
         if not self._is_active_hours():
-            if not self._logged_off_hours:
-                name = self.cfg.get("name","?")
-                broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
-                self._logged_off_hours = True
-            return
+            if manual:
+                pass  # allow manual bump outside working hours
+            else:
+                if not self._logged_off_hours:
+                    name = self.cfg.get("name","?")
+                    broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
+                    self._logged_off_hours = True
+                return
         self._logged_off_hours = False
 
         token = self.get_token()
