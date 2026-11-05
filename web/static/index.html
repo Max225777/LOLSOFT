@@ -892,9 +892,7 @@ async function checkCooldowns() {
     } else {
       appendLog(`🔒 Залочено лотів: ${items.length}`, 'warn');
       for (const it of items) {
-        const m = it.mins_left >= 60
-          ? `${Math.floor(it.mins_left/60)}г ${Math.round(it.mins_left%60)}хв`
-          : `${it.mins_left}хв`;
+        const m = `${it.mins_left}хв`;
         appendLog(`  🔒 [${it.market}][${it.tag}] ${it.title} — лишилось: ${m}`, 'warn');
       }
     }
