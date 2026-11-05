@@ -10,7 +10,7 @@ import threading
 import time
 import urllib.parse
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 _KYIV_TZ = ZoneInfo("Europe/Kyiv")
@@ -418,8 +418,21 @@ class MarketEngine:
         if not self.cfg.get("enabled", True):
             return
         if not self._is_active_hours() and not manual:
-            name = self.cfg.get("name","?")
-            broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
+            name     = self.cfg.get("name","?")
+            work_from = self.cfg.get("work_from","")
+            now_dt   = datetime.now(_KYIV_TZ)
+            if work_from:
+                wf_h, wf_m = int(work_from[:2]), int(work_from[3:])
+                next_start = now_dt.replace(hour=wf_h, minute=wf_m, second=0, microsecond=0)
+                if next_start <= now_dt:
+                    next_start += timedelta(days=1)
+                diff = int((next_start - now_dt).total_seconds())
+                h, rem = divmod(diff, 3600)
+                m = rem // 60
+                till = f"через {h}г {m}хв" if h else f"через {m}хв"
+                broadcaster.emit(f"⏰ [{name}] поза робочим часом — наступний бамп о {work_from} ({till})", "info")
+            else:
+                broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
             return
 
         token = self.get_token()
