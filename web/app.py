@@ -676,6 +676,15 @@ class SchedulerManager:
                             cache[id_to_name[tid]].append(it)
                     elif isinstance(t, int) and t in id_to_name:
                         cache[id_to_name[t]].append(it)
+            # merge: preserve bumped_at set after bumps; refresh pin state from API
+            for tag_name, new_items in cache.items():
+                old_by_id = {str(x.get("item_id","")): x for x in _tag_items_cache.get(tag_name, [])}
+                for ni in new_items:
+                    iid = str(ni.get("item_id", ""))
+                    if iid in old_by_id:
+                        old = old_by_id[iid]
+                        if old.get("bumped_at"):
+                            ni["bumped_at"] = old["bumped_at"]
             _tag_items_cache = cache
             _cache_loaded_at = datetime.now(_KYIV_TZ).strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
