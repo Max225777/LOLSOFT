@@ -193,6 +193,7 @@ tr:hover td{background:#1e1e1e}
         <div class="spacer" style="text-align:center;font-size:12px;color:var(--sub);letter-spacing:.05em">📦 АКТИВНІ ЛОТИ ПО ТЕГАХ</div>
         <span style="font-size:10px;color:var(--sub)">🕐 кулдаун</span>
         <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
+        <button class="btn-s" id="btn-refresh-cache" onclick="manualRefreshCache()" title="Оновити лоти з API" style="padding:2px 7px;font-size:10px">🔄</button>
       </div>
       <div id="tag-stats-body">
         <span style="color:var(--sub);font-size:11px;padding:10px">Завантаження…</span>
@@ -766,6 +767,24 @@ async function renderSettingsOverlay(body) {
     <div style="font-size:12px;color:var(--green)">✅ Авто-підняття і авто-оновлення завжди увімкнено</div>`;
   body.appendChild(autoCard);
 
+  const arCard = document.createElement('div');
+  arCard.className = 'card';
+  const arEnabled = CFG.autorefresh_cd_enabled || false;
+  const arInterval = CFG.autorefresh_cd_min || 5;
+  arCard.innerHTML = `
+    <div class="card-hd">Авто-перевірка кулдаунів</div>
+    <div class="row" style="gap:10px;align-items:center;margin-top:6px">
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="ar-cd-enabled" ${arEnabled?'checked':''} onchange="saveAutoRefreshCd()">
+        Увімкнути авто-оновлення тегів
+      </label>
+      <label style="font-size:12px">кожні
+        <input type="number" id="ar-cd-min" value="${arInterval}" min="1" max="60" style="width:50px;margin:0 4px" onchange="saveAutoRefreshCd()"> хв
+      </label>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">Якщо увімкнено — панель тегів оновлюється з API з вказаним інтервалом</div>`;
+  body.appendChild(arCard);
+
   // cache status
   let cacheHtml = '';
   try {
@@ -858,6 +877,44 @@ async function refreshMarketItems(name) {
     await api('/api/refresh-cache', {method:'POST'});
     toast('📦 Лоти оновлюються…');
     setTimeout(loadTagStats, 5000);
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function manualRefreshCache() {
+  const btn = document.getElementById('btn-refresh-cache');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  try {
+    await api('/api/refresh-cache', {method:'POST'});
+    toast('📦 Оновлення запущено…');
+    setTimeout(async () => { await loadTagStats(); if (btn) { btn.textContent = '🔄'; btn.disabled = false; } }, 6000);
+  } catch(e) {
+    toast('⛔ '+e.message, false);
+    if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
+  }
+}
+
+let _arCdTimer = null;
+function _startAutoRefreshCd() {
+  if (_arCdTimer) { clearInterval(_arCdTimer); _arCdTimer = null; }
+  if (!CFG.autorefresh_cd_enabled) return;
+  const ms = Math.max(1, CFG.autorefresh_cd_min || 5) * 60000;
+  _arCdTimer = setInterval(async () => {
+    await api('/api/refresh-cache', {method:'POST'}).catch(()=>{});
+    setTimeout(loadTagStats, 6000);
+  }, ms);
+}
+
+async function saveAutoRefreshCd() {
+  const enabled = document.getElementById('ar-cd-enabled')?.checked || false;
+  const min = parseInt(document.getElementById('ar-cd-min')?.value) || 5;
+  CFG.autorefresh_cd_enabled = enabled;
+  CFG.autorefresh_cd_min = min;
+  const patch = {...CFG, markets: marketsLocal};
+  delete patch.token;
+  try {
+    await api('/api/config', {method:'POST', body:JSON.stringify({data:patch})});
+    toast(enabled ? `✅ Авто-перевірка кожні ${min} хв` : '⏹ Авто-перевірку вимкнено');
+    _startAutoRefreshCd();
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
@@ -958,6 +1015,7 @@ async function loadServerStatus() {
 (async () => {
   connectWS();
   await loadCfg();
+  _startAutoRefreshCd();
   loadMarketStatus();
   loadTagStats();
   loadServerStatus();
