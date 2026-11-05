@@ -398,16 +398,13 @@ class MarketEngine:
 
     def bump_tick(self, manual: bool = False):
         if manual:
-            # manual bump: wait up to 30s for lock
-            acquired = self._bump_lock.acquire(blocking=True, timeout=30)
-        else:
-            acquired = self._bump_lock.acquire(blocking=False)
-        if not acquired:
-            if manual:
-                broadcaster.emit("⚠ Ручний бамп: не вдалось отримати лок за 30с", "warn")
+            # manual bump runs without lock — parallel to scheduler
+            self._bump_tick_inner(manual=True)
             return
+        if not self._bump_lock.acquire(blocking=False):
+            return  # scheduler tick already running, skip
         try:
-            self._bump_tick_inner(manual=manual)
+            self._bump_tick_inner()
         finally:
             self._bump_lock.release()
 
