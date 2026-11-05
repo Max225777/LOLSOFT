@@ -894,6 +894,34 @@ def market_status():
         })
     return result
 
+@app.get("/api/cooldowns-detail")
+def get_cooldowns_detail():
+    """Return per-item cooldown details: title, tag, market, seconds_left."""
+    now = time.time()
+    rows = []
+    for name, engine in sched_mgr._engines.items():
+        for iid, exp in list(engine._cooldowns.items()):
+            if exp <= now:
+                continue
+            tag = engine._cooldown_tags.get(iid, "?")
+            secs_left = int(exp - now)
+            # try to find title from cache
+            title = iid
+            for it in _tag_items_cache.get(tag, []):
+                if str(it.get("item_id", "")) == iid:
+                    title = it.get("title", iid)[:60]
+                    break
+            rows.append({
+                "market": name,
+                "tag": tag,
+                "item_id": iid,
+                "title": title,
+                "secs_left": secs_left,
+                "mins_left": round(secs_left / 60, 1),
+            })
+    rows.sort(key=lambda r: r["secs_left"])
+    return {"total": len(rows), "items": rows}
+
 @app.get("/api/cooldown-stats")
 def get_cooldown_stats():
     now = time.time()

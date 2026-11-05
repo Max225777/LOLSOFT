@@ -193,6 +193,7 @@ tr:hover td{background:#1e1e1e}
         <div class="spacer" style="text-align:center;font-size:12px;color:var(--sub);letter-spacing:.05em">📦 АКТИВНІ ЛОТИ ПО ТЕГАХ</div>
         <span style="font-size:10px;color:var(--sub)">🕐 кулдаун</span>
         <button class="btn-s" onclick="saveHidden([]);renderTagChips()" title="Показати всі приховані теги" style="padding:2px 7px;font-size:10px">👁</button>
+        <button class="btn-s" id="btn-check-cooldowns" onclick="checkCooldowns()" title="Показати залочені лоти в консолі" style="padding:2px 7px;font-size:10px">🔒</button>
         <button class="btn-s" id="btn-refresh-cache" onclick="manualRefreshCache()" title="Оновити лоти з API" style="padding:2px 7px;font-size:10px">🔄</button>
       </div>
       <div id="tag-stats-body">
@@ -878,6 +879,30 @@ async function refreshMarketItems(name) {
     toast('📦 Лоти оновлюються…');
     setTimeout(loadTagStats, 5000);
   } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function checkCooldowns() {
+  const btn = document.getElementById('btn-check-cooldowns');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  try {
+    const data = await api('/api/cooldowns-detail');
+    const items = data.items || [];
+    if (items.length === 0) {
+      appendLog('✅ Залочених лотів немає — всі вільні', 'ok');
+    } else {
+      appendLog(`🔒 Залочено лотів: ${items.length}`, 'warn');
+      for (const it of items) {
+        const m = it.mins_left >= 60
+          ? `${Math.floor(it.mins_left/60)}г ${Math.round(it.mins_left%60)}хв`
+          : `${it.mins_left}хв`;
+        appendLog(`  🔒 [${it.market}][${it.tag}] ${it.title} — лишилось: ${m}`, 'warn');
+      }
+    }
+  } catch(e) {
+    appendLog('⚠ Не вдалось перевірити кулдауни: ' + e, 'error');
+  } finally {
+    if (btn) { btn.textContent = '🔒'; btn.disabled = false; }
+  }
 }
 
 async function manualRefreshCache() {
