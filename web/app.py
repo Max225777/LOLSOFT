@@ -395,9 +395,16 @@ class MarketEngine:
         except Exception as e:
             broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
 
-    def bump_tick(self):
-        if not self._bump_lock.acquire(blocking=False):
-            return  # previous tick still running, skip
+    def bump_tick(self, manual: bool = False):
+        if manual:
+            # manual bump: wait up to 30s for lock
+            acquired = self._bump_lock.acquire(blocking=True, timeout=30)
+        else:
+            acquired = self._bump_lock.acquire(blocking=False)
+        if not acquired:
+            if manual:
+                broadcaster.emit("⚠ Ручний бамп: не вдалось отримати лок за 30с", "warn")
+            return
         try:
             self._bump_tick_inner()
         finally:
@@ -982,7 +989,7 @@ def bump_now(market_name: str):
     engine = sched_mgr._engines.get(market_name)
     if not engine:
         raise HTTPException(404, "Market not found or inactive")
-    threading.Thread(target=engine.bump_tick, daemon=True).start()
+    threading.Thread(target=engine.bump_tick, kwargs={"manual": True}, daemon=True).start()
     return {"ok": True}
 
 @app.get("/api/market-listings/{market_name}")
