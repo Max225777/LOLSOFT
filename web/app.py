@@ -365,6 +365,7 @@ class MarketEngine:
         self._cycle_done:    int = 0
         self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
+        self._logged_off_hours = False
 
     def get_token(self) -> str:
         return self.token_fn()
@@ -414,9 +415,12 @@ class MarketEngine:
         if not self.cfg.get("enabled", True):
             return
         if not self._is_active_hours():
-            name = self.cfg.get("name","?")
-            broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
+            if not self._logged_off_hours:
+                name = self.cfg.get("name","?")
+                broadcaster.emit(f"⏰ [{name}] поза робочим часом — пропуск", "info")
+                self._logged_off_hours = True
             return
+        self._logged_off_hours = False
 
         token = self.get_token()
         if not token:
