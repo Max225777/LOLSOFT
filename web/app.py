@@ -365,6 +365,7 @@ class MarketEngine:
         self._cycle_done:    int = 0
         self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
+        self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
         self._logged_off_hours = False
 
     def get_token(self) -> str:
@@ -384,6 +385,8 @@ class MarketEngine:
     def refresh_tick(self):
         if not self.cfg.get("enabled", True):
             return
+        if not self._is_active_hours():
+            return
         token = self.get_token()
         if not token:
             return
@@ -398,8 +401,12 @@ class MarketEngine:
 
     def bump_tick(self, manual: bool = False):
         if manual:
-            # manual bump runs without lock — parallel to scheduler
-            self._bump_tick_inner(manual=True)
+            if not self._manual_lock.acquire(blocking=False):
+                return  # another manual bump already running
+            try:
+                self._bump_tick_inner(manual=True)
+            finally:
+                self._manual_lock.release()
             return
         if not self._bump_lock.acquire(blocking=False):
             return  # scheduler tick already running, skip
