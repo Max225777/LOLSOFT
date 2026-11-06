@@ -782,9 +782,10 @@ class SchedulerManager:
         self._sched.remove_all_jobs()
         self._engines.clear()
 
-        # always load cache on reload and schedule 15-min refresh
+        # load cache immediately in background; schedule next refresh in 15 min
         threading.Thread(target=self._warmup_cache, daemon=True).start()
         self._sched.add_job(_safe_job(self._warmup_cache), "interval", minutes=15,
+                            start_date=datetime.now(_KYIV_TZ) + timedelta(minutes=15),
                             id="cache_refresh", replace_existing=True)
 
         if not cfg.get("autobump", False) and not cfg.get("autorefresh", False):
@@ -854,49 +855,24 @@ class SchedulerManager:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
     def _reset_pins(self, token: str):
-        """After cache load: unpin everything, then pin top-N per tag by most-recent bump."""
+        """After cache load: unpin ALL items. Pins will be restored gradually through bumps."""
         cfg = load_config()
         tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
         if not tag_sticky:
             return
-        broadcaster.emit("📌 Перевстановлення закріплень після оновлення кешу…", "info")
-        for tag, target in tag_sticky.items():
-            if target <= 0:
-                continue
-            items = items_for_tag(tag)
-            if not items:
-                continue
+        for tag in tag_sticky:
+            items = _tag_items_cache.get(tag.strip(), [])
             pinned = [x for x in items if _is_pinned(x)]
-            # sort all items newest-bumped first
-            sorted_by_bump = sorted(
-                items,
-                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0,
-                reverse=True
-            )
-            should_be_pinned = {str(x.get("item_id","")) for x in sorted_by_bump[:target]}
-            currently_pinned = {str(x.get("item_id","")) for x in pinned}
-
-            # unpin items that shouldn't be pinned
+            if not pinned:
+                continue
+            broadcaster.emit(f"📌 [{tag}] знімаємо {len(pinned)} закріплень перед перезапуском…", "info")
             for it in pinned:
                 iid = str(it.get("item_id",""))
-                if iid not in should_be_pinned:
-                    ok, err = unstick_item(token, iid)
-                    if ok:
-                        it["is_pinned"] = False; it["is_sticky"] = False
-                        broadcaster.emit(f"📌 [{tag}] знято зайве: {it.get('title','?')[:40]}", "info")
-                    elif "[403]" not in err:
-                        broadcaster.emit(f"⚠ [{tag}] не вдалось зняти {iid}: {err}", "warn")
-
-            # pin items that should be pinned but aren't
-            for it in sorted_by_bump[:target]:
-                iid = str(it.get("item_id",""))
-                if iid not in currently_pinned:
-                    ok, err = stick_item(token, iid)
-                    if ok:
-                        it["is_pinned"] = True; it["is_sticky"] = True
-                        broadcaster.emit(f"📌 [{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
-                    elif "[403]" not in err:
-                        broadcaster.emit(f"⚠ [{tag}] не вдалось закріпити {iid}: {err}", "warn")
+                ok, err = unstick_item(token, iid)
+                if ok:
+                    it["is_pinned"] = False; it["is_sticky"] = False
+                elif "[403]" not in err:
+                    broadcaster.emit(f"⚠ [{tag}] не вдалось зняти {iid}: {err}", "warn")
 
 sched_mgr = SchedulerManager()
 
