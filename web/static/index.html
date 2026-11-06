@@ -886,18 +886,18 @@ async function checkCooldowns() {
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   try {
     const data = await api('/api/cooldowns-detail');
-    const items = data.items || [];
-    if (items.length === 0) {
-      appendLog('✅ Залочених лотів немає — всі вільні', 'ok');
+    const locked = data.items || [];
+    addLogLine(`━━━ 🔒 ПЕРЕВІРКА КУЛДАУНІВ: залочено ${locked.length} ━━━`);
+    if (locked.length === 0) {
+      addLogLine('✅ Всі лоти вільні');
     } else {
-      appendLog(`🔒 Залочено лотів: ${items.length}`, 'warn');
-      for (const it of items) {
-        const m = `${it.mins_left}хв`;
-        appendLog(`  🔒 [${it.market}][${it.tag}] ${it.title} — лишилось: ${m}`, 'warn');
+      for (const it of locked) {
+        addLogLine(`🔒 [${it.market}][${it.tag}] ${it.title} — ще ${it.mins_left}хв`);
       }
     }
+    addLogLine(`━━━ кінець ━━━`);
   } catch(e) {
-    appendLog('⚠ Не вдалось перевірити кулдауни: ' + e, 'error');
+    addLogLine('⚠ Не вдалось перевірити кулдауни: ' + e);
   } finally {
     if (btn) { btn.textContent = '🔒'; btn.disabled = false; }
   }

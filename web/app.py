@@ -417,6 +417,12 @@ class MarketEngine:
     def _bump_tick_inner(self, manual: bool = False):
         if not self.cfg.get("enabled", True):
             return
+        # always purge expired cooldowns regardless of working hours
+        _now = time.time()
+        expired = [k for k, v in list(self._cooldowns.items()) if v <= _now]
+        for k in expired:
+            del self._cooldowns[k]
+            self._cooldown_tags.pop(k, None)
         if not self._is_active_hours() and not manual:
             name     = self.cfg.get("name","?")
             work_from = self.cfg.get("work_from","")
