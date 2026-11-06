@@ -545,12 +545,6 @@ class MarketEngine:
             return
 
         now = time.time()
-        # purge expired cooldowns
-        expired = [k for k, v in list(self._cooldowns.items()) if v <= now]
-        for k in expired:
-            del self._cooldowns[k]
-            self._cooldown_tags.pop(k, None)
-
         api_limit_hit = False
         for tag, bumps_needed in active_tags:
             if api_limit_hit:
@@ -685,7 +679,7 @@ class MarketEngine:
                     self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                     self._cooldown_tags[iid] = tag
 
-            if bumped_count == 0:
+            if bumped_count == 0 and api_tried > 0:
                 avail = sum(1 for it in sorted_items if self._cooldowns.get(str(it.get("item_id","")), 0) <= now)
                 broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({api_tried} спроб, {avail}/{len(sorted_items)} вільних)", "warn")
 
@@ -712,9 +706,15 @@ class MarketEngine:
         excess = len(pinned) - target
         to_unpin_count = max(free_needed + excess, 0) if not already_pinned else max(excess, 0)
 
+        def _set_pin_in_cache(item_id: str, pinned_val: bool):
+            """Update is_pinned in _tag_items_cache by item_id (fetch returns new objects)."""
+            for cached_it in _tag_items_cache.get(tag.strip(), []):
+                if str(cached_it.get("item_id", "")) == item_id:
+                    cached_it["is_pinned"] = pinned_val
+                    cached_it["is_sticky"] = pinned_val
+                    break
+
         if to_unpin_count > 0:
-            # sort pinned by bumped_at ascending (oldest first), exclude the just-bumped item
-            # and items that previously returned 403 (can't be unstuck)
             candidates = sorted(
                 [x for x in pinned
                  if str(x.get("item_id", "")) != iid
@@ -730,6 +730,7 @@ class MarketEngine:
                 if ok_u:
                     oldest["is_pinned"] = False
                     oldest["is_sticky"] = False
+                    _set_pin_in_cache(old_id, False)
                     broadcaster.emit(f"📌 [{name}][{tag}] знято: {oldest.get('title','?')[:40]}", "info")
                     removed += 1
                 elif "[403]" in err_u:
@@ -744,6 +745,7 @@ class MarketEngine:
             if ok_s:
                 it["is_pinned"] = True
                 it["is_sticky"] = True
+                _set_pin_in_cache(iid, True)
                 broadcaster.emit(f"📌 [{name}][{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
             elif "[403]" in err_s:
                 self._stick_blocked.add(iid)
@@ -850,29 +852,8 @@ class SchedulerManager:
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(
                 f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
-            self._reset_pins(token)
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
-
-    def _reset_pins(self, token: str):
-        """After cache load: unpin ALL items. Pins will be restored gradually through bumps."""
-        cfg = load_config()
-        tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
-        if not tag_sticky:
-            return
-        for tag in tag_sticky:
-            items = _tag_items_cache.get(tag.strip(), [])
-            pinned = [x for x in items if _is_pinned(x)]
-            if not pinned:
-                continue
-            broadcaster.emit(f"📌 [{tag}] знімаємо {len(pinned)} закріплень перед перезапуском…", "info")
-            for it in pinned:
-                iid = str(it.get("item_id",""))
-                ok, err = unstick_item(token, iid)
-                if ok:
-                    it["is_pinned"] = False; it["is_sticky"] = False
-                elif "[403]" not in err:
-                    broadcaster.emit(f"⚠ [{tag}] не вдалось зняти {iid}: {err}", "warn")
 
 sched_mgr = SchedulerManager()
 
