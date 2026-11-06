@@ -482,9 +482,7 @@ function renderTagChips() {
         ${lockBar}
         <div class="tag-chip-body" style="pointer-events:none">
           ${priceStr ? `<div class="tag-chip-price">${x(priceStr)}</div>` : '<div></div>'}
-          <div style="display:flex;align-items:baseline;gap:1px">
-            <span style="font-size:16px;font-weight:700;color:${t.cooldown>0?'var(--yellow)':'var(--green)'}">${t.cooldown}</span><span style="font-size:12px;color:#555;font-weight:600;margin:0 1px">/</span><span style="font-size:16px;font-weight:700;color:var(--green)">${t.total}</span>
-          </div>
+          <div style="font-size:18px;font-weight:700;color:var(--green);line-height:1">${t.total}<span style="font-size:12px;font-weight:400;color:#666;margin-left:2px">шт</span></div>
           <div style="display:flex;align-items:center;gap:3px;pointer-events:auto;flex-wrap:nowrap;overflow:hidden">
             <span style="font-size:10px;color:#666;flex-shrink:0">📌</span>
             <button onclick="event.stopPropagation();setSticky('${x(t.tag)}',-1)" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#888;width:16px;height:16px;border-radius:3px;cursor:pointer;font-size:11px;line-height:1;padding:0;flex-shrink:0">−</button>
@@ -1030,7 +1028,11 @@ function _paintConsole() {
   const atBot = el.scrollHeight - el.scrollTop <= el.clientHeight + 40;
   el.innerHTML = logLines.map(m => {
     const col = {ok:'#6dbf6d', warn:'#ffc857', error:'#ff5252', info:'#444'}[m.level]||'#444';
-    return `<div><span style="color:#2a2a2a">${m.time} </span><span style="color:${col}">${x(m.text)}</span></div>`;
+    // safe render: escape plain text, turn [title](url) into links
+    const escaped = x(m.text);
+    const linked = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+      (_, t, u) => `<a href="${u}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-decoration-color:#555;cursor:pointer">${t}</a>`);
+    return `<div><span style="color:#2a2a2a">${m.time} </span><span style="color:${col}">${linked}</span></div>`;
   }).join('');
   if (atBot) el.scrollTop = el.scrollHeight;
   const cnt = document.getElementById('console-count');
