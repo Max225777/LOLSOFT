@@ -374,6 +374,8 @@ class MarketEngine:
         return self.token_fn()
 
     def _is_active_hours(self) -> bool:
+        if self.cfg.get("ignore_hours", False):
+            return True
         work_from = self.cfg.get("work_from", "")
         work_to   = self.cfg.get("work_to", "")
         if not work_from or not work_to:

@@ -637,6 +637,10 @@ function buildMktCard(m, idx) {
       <input type="time" class="mkt-to" value="${m.work_to||''}"/>
       <span style="font-size:10px;color:var(--sub)">(порожньо = цілодобово)</span>
     </div>
+    <div class="row" style="margin-top:4px;gap:6px;align-items:center">
+      <input type="checkbox" class="mkt-ignore-hours" id="mkt-ignore-${m.name||idx}" ${m.ignore_hours?'checked':''}/>
+      <label for="mkt-ignore-${m.name||idx}" style="cursor:pointer;font-size:12px">Ігнорувати робочий час (завжди бампити)</label>
+    </div>
     <div class="card-hd" style="margin-top:10px">Теги для підняття</div>
     <div class="tags-grid mkt-tags">
       ${(m.tags||[]).map(t=>`
@@ -675,7 +679,7 @@ function addTagRow(btn) {
 
 function addMarket() {
   const newMkt = {name:'Новий ринок',url:'',tags:[],count:10,top_n:1,
-    refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:''};
+    refresh_interval:60,bump_interval:60,enabled:true,work_from:'',work_to:'',ignore_hours:false};
   marketsLocal.push(newMkt);
   const c = document.getElementById('markets-list');
   if (c) c.appendChild(buildMktCard(newMkt, marketsLocal.length-1));
@@ -699,6 +703,7 @@ function collectMarkets() {
     bump_interval:    +card.querySelector('.mkt-bi').value||60,
     work_from:        card.querySelector('.mkt-from').value,
     work_to:          card.querySelector('.mkt-to').value,
+    ignore_hours:     card.querySelector('.mkt-ignore-hours')?.checked || false,
     enabled:          card.querySelector('.mkt-en').checked,
     tags: Array.from(card.querySelectorAll('.tag-row'))
       .map(r=>({tag:r.querySelector('.tname').value.trim(), count:+r.querySelector('.tcnt').value||1}))
