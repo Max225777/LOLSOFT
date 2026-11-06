@@ -483,6 +483,7 @@ function renderTagChips() {
         <div class="tag-chip-body" style="pointer-events:none">
           ${priceStr ? `<div class="tag-chip-price">${x(priceStr)}</div>` : '<div></div>'}
           <div style="font-size:18px;font-weight:700;color:var(--green);line-height:1">${t.total}<span style="font-size:12px;font-weight:400;color:#666;margin-left:2px">шт</span></div>
+          <div style="font-size:10px;color:#555;line-height:1.2">${t.last_bump_ago_secs != null ? (t.last_bump_ago_secs < 60 ? `⏱ ${t.last_bump_ago_secs}с тому` : `⏱ ${Math.floor(t.last_bump_ago_secs/60)}хв тому`) : '⏱ —'}</div>
           <div style="display:flex;align-items:center;gap:3px;pointer-events:auto;flex-wrap:nowrap;overflow:hidden">
             <span style="font-size:10px;color:#666;flex-shrink:0">📌</span>
             <button onclick="event.stopPropagation();setSticky('${x(t.tag)}',-1)" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#888;width:16px;height:16px;border-radius:3px;cursor:pointer;font-size:11px;line-height:1;padding:0;flex-shrink:0">−</button>

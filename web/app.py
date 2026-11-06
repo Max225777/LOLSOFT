@@ -1025,12 +1025,21 @@ def get_cooldown_stats():
                 tag_pause_until = tp
         tag_pause_secs = max(0, int(tag_pause_until - now)) if tag_pause_until > now else 0
 
+        # Most recent bump time across all items in cache (max pdate)
+        last_bump_ts = 0
+        for it in items:
+            ts = it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+            if ts and ts > last_bump_ts:
+                last_bump_ts = ts
+        last_bump_ago_secs = int(now - last_bump_ts) if last_bump_ts else None
+
         result.append({
             "tag": tag, "total": total, "cooldown": on_cd,
             "price_sum": round(price_sum, 2), "currency": currency,
             "sticky_current": sticky_current,
             "sticky_target": tag_sticky.get(tag, 0),
             "tag_pause_secs": tag_pause_secs,
+            "last_bump_ago_secs": last_bump_ago_secs,
         })
     return sorted(result, key=lambda r: r["tag"])
 
