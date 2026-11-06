@@ -389,6 +389,7 @@ class MarketEngine:
         self._cooldown_tags: dict[str, str]   = {}   # item_id → tag_name
         self._tag_pauses:    dict[str, float] = {}   # tag_name → pause_until (whole-tag cooldown)
         self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
+        self._stick_blocked:   set[str] = set()  # item_ids that returned 403 on stick
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
         self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
 
@@ -731,12 +732,15 @@ class MarketEngine:
                     broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
 
         # pin the just-bumped item
-        if not already_pinned:
+        if not already_pinned and iid not in self._stick_blocked:
             ok_s, err_s = stick_item(token, iid)
             if ok_s:
                 it["is_pinned"] = True
                 it["is_sticky"] = True
                 broadcaster.emit(f"📌 [{name}][{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
+            elif "[403]" in err_s:
+                self._stick_blocked.add(iid)
+                broadcaster.emit(f"⚠ [{name}][{tag}] {iid} заблоковано для закріплення (403), пропуск", "warn")
             else:
                 broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {iid}: {err_s}", "warn")
 
@@ -784,7 +788,8 @@ class SchedulerManager:
             name    = mkt.get("name", "?")
             engine  = MarketEngine(mkt, self._token)
             self._engines[name] = engine
-            stagger = idx * 5  # 5s offset between markets
+            market_delay = max(1, cfg.get("market_delay_sec", 5))
+            stagger = idx * market_delay  # configurable offset between markets
 
             if cfg.get("autorefresh", False):
                 ri = max(30, mkt.get("refresh_interval", 60))
