@@ -237,13 +237,10 @@ def bump_item(token: str, item_id: str) -> tuple[bool, str]:
         code = resp.status_code
         ml   = msg.lower()
         raw  = f"[{code}] {msg[:80]}"
-        # daily bump limit exhausted: "bumps" + "0" or explicit limit message
-        if ("bump" in ml and "0" in ml) or "bumps_count" in ml:
-            return False, f"ліміт: {raw}"
-        # temporary API rate limit (per-minute): 429 or flood/wait messages
+        # temporary per-minute rate limit: 429 or flood/wait messages
         if code == 429 or any(x in ml for x in ("flood","wait","подожд","зачекайте","too many")):
             return False, f"ratelimit: {raw}"
-        # "лимит" text without bump count context = also daily limit
+        # daily bump limit exhausted: any "лимит/limit" text that is NOT a rate limit
         if "лимит" in ml or "limit" in ml:
             return False, f"ліміт: {raw}"
         if code == 404 or any(x in ml for x in ("not found","deleted","sold")):
