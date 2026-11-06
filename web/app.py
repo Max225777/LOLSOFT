@@ -228,15 +228,13 @@ _bump_quota: dict = {}  # {"used": int, "limit": int, "left": int, "fetched_at":
 _bump_quota_lock = threading.Lock()
 
 def fetch_bump_quota(token: str) -> dict:
-    """Fetch daily bump quota from LOLZ account info. Returns dict with used/limit/left."""
+    """Fetch daily bump quota from LOLZ /me endpoint."""
     try:
-        resp = requests.get(f"{API_BASE}/user/{MY_PROFILE_ID}",
-                            headers=_headers(token), timeout=10)
+        resp = requests.get(f"{API_BASE}/me", headers=_headers(token), timeout=10)
         if resp.status_code != 200:
             return {}
         body = resp.json()
         user = body.get("user") or body
-        # LOLZ returns bump stats under different keys depending on API version
         used  = user.get("bumps_count") or user.get("items_bumped") or 0
         limit = user.get("bumps_limit") or user.get("bumps_per_day") or 0
         left  = user.get("bumps_left") or (max(0, limit - used) if limit else None)
