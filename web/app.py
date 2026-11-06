@@ -107,7 +107,7 @@ def fetch_listings(market_url: str, token: str, count: int) -> list[dict]:
         seller_id   = str(seller.get("user_id", ""))
         seller_name = seller.get("username", "?")
         state       = it.get("item_state", "")
-        bumped_at   = (it.get("bumped_at") or it.get("up_timestamp")
+        bumped_at   = (it.get("refreshed_date") or it.get("bumped_at") or it.get("up_timestamp")
                        or it.get("refreshed_at") or it.get("updated_at"))
         parsed.append({
             "id": item_id, "title": title,
@@ -425,7 +425,7 @@ class MarketEngine:
             for idx, it in enumerate(items[:bumps_needed + 2]):
                 iid   = str(it.get("item_id", ""))
                 title = it.get("title") or it.get("title_en") or f"#{iid}"
-                pdate = it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+                pdate = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
                 lot_link = f"[{title}](https://lzt.market/{iid}/)"
                 if pdate:
                     secs_ago = int(now - pdate)
@@ -594,10 +594,10 @@ class MarketEngine:
                 title = it.get("title") or it.get("title_en") or f"#{iid}"
                 lot_link = f"[{title}](https://lzt.market/{iid}/)"
 
-                # pdate is the bump timestamp (same field LOLZ sorts by pdate_to_up)
-                pdate = it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+                # refreshed_date is the actual last-bump timestamp in LOLZ API responses
+                pdate = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
 
-                # pre-check: if pdate says item was bumped less than 1h ago — skip without API call
+                # pre-check: if refreshed_date says item was bumped less than 1h ago — skip without API call
                 if pdate and (now - pdate) < self.ITEM_COOLDOWN_SEC:
                     remaining = int(self.ITEM_COOLDOWN_SEC - (now - pdate))
                     self._cooldowns[iid] = now + remaining
@@ -691,7 +691,7 @@ class MarketEngine:
                 [x for x in pinned
                  if str(x.get("item_id", "")) != iid
                  and str(x.get("item_id", "")) not in self._unstick_blocked],
-                key=lambda x: x.get("bumped_at") or x.get("up_timestamp") or 0
+                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0
             )
             removed = 0
             for oldest in candidates:
@@ -810,8 +810,8 @@ class SchedulerManager:
                     iid = str(ni.get("item_id", ""))
                     if iid in old_by_id:
                         old = old_by_id[iid]
-                        if old.get("bumped_at"):
-                            ni["bumped_at"] = old["bumped_at"]
+                        if old.get("refreshed_date") or old.get("bumped_at"):
+                            ni["refreshed_date"] = old.get("refreshed_date") or old.get("bumped_at")
             _tag_items_cache = cache
             _cache_loaded_at = datetime.now(_KYIV_TZ).strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
@@ -1109,7 +1109,7 @@ def get_cooldown_stats():
         # Most recent bump time across all items in cache (max pdate)
         last_bump_ts = 0
         for it in items:
-            ts = it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+            ts = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
             if ts and ts > last_bump_ts:
                 last_bump_ts = ts
         last_bump_ago_secs = int(now - last_bump_ts) if last_bump_ts else None
