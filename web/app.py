@@ -237,14 +237,19 @@ def bump_item(token: str, item_id: str) -> tuple[bool, str]:
         code = resp.status_code
         ml   = msg.lower()
         raw  = f"[{code}] {msg[:80]}"
-        if "лимит" in ml or "limit" in ml or ("bump" in ml and "0" in ml):
+        # daily bump limit exhausted: "bumps" + "0" or explicit limit message
+        if ("bump" in ml and "0" in ml) or "bumps_count" in ml:
             return False, f"ліміт: {raw}"
-        if code == 429 or any(x in ml for x in ("cooldown","flood","wait","подожд","зачекайте")):
-            return False, f"кулдаун: {raw}"
+        # temporary API rate limit (per-minute): 429 or flood/wait messages
+        if code == 429 or any(x in ml for x in ("flood","wait","подожд","зачекайте","too many")):
+            return False, f"ratelimit: {raw}"
+        # "лимит" text without bump count context = also daily limit
+        if "лимит" in ml or "limit" in ml:
+            return False, f"ліміт: {raw}"
         if code == 404 or any(x in ml for x in ("not found","deleted","sold")):
             return False, f"продано/видалено: {raw}"
         if code == 403:
-            return False, f"ліміт: {raw}"
+            return False, f"заборонено: {raw}"
         return False, raw
     except Exception as e:
         return False, str(e)[:80]
@@ -643,9 +648,20 @@ class MarketEngine:
                     record_bump(name, tag, iid, title, False, reason)
                     _api_limit_until = now + API_LIMIT_PAUSE_SEC
                     mins = API_LIMIT_PAUSE_SEC // 60
-                    broadcaster.emit(f"🚫 ліміт підняттів LOLZ — пауза всіх ринків на {mins}хв", "warn")
+                    broadcaster.emit(f"🚫 денний ліміт підняттів LOLZ — пауза всіх ринків на {mins}хв", "warn")
                     api_limit_hit = True
-                    break  # stop items loop; outer loop also breaks via api_limit_hit flag
+                    break
+
+                elif reason.startswith("ratelimit"):
+                    # per-minute API rate limit — short pause for this market only, not global
+                    broadcaster.emit(f"⏱ [{name}][{tag}] rate limit LOLZ — пауза 30с", "warn")
+                    time.sleep(30)
+                    break  # restart tag next tick
+
+                elif reason.startswith("заборонено"):
+                    broadcaster.emit(f"⚠ [{name}][{tag}] {lot_link} — 403 заборонено", "warn")
+                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                    self._cooldown_tags[iid] = tag
 
                 elif reason.startswith("кулдаун"):
                     # LOLZ says cooldown despite pdate check — calculate from pdate
