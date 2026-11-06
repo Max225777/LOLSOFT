@@ -98,6 +98,10 @@ input.wide{min-width:220px;flex:1}
 .tag-chip-cd{font-size:16px;font-weight:700;color:var(--yellow);line-height:1}
 .tag-chip-cd.none{color:var(--green)}
 .tag-chip-empty{border:1px dashed #2d2d2d;border-radius:8px;transition:border-color .15s,background .15s}
+.tag-chip.locked{border-color:#c0392b55;background:#1a0a0a}
+.tag-chip-lock-bar{background:#2a0a0a;border-bottom:1px solid #c0392b44;padding:3px 8px;display:flex;align-items:center;gap:5px;font-size:11px;color:#e74c3c;font-weight:700;flex-shrink:0}
+.tag-chip-lock-bar .lock-icon{font-size:13px}
+.tag-chip-lock-bar .lock-time{font-size:11px;color:#c0392b;font-weight:900;letter-spacing:.3px}
 
 /* market status cards */
 .mkt-status-card{background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px}
@@ -460,18 +464,22 @@ function renderTagChips() {
     const t = cellMap[i];
     if (t) {
       const chip = document.createElement('div');
-      chip.className = 'tag-chip';
+      const isLocked = (t.tag_pause_secs || 0) > 0;
+      chip.className = 'tag-chip' + (isLocked ? ' locked' : '');
       chip.draggable = true;
       chip.dataset.tag = t.tag;
       chip.dataset.cell = i;
-      const cdClass = t.cooldown > 0 ? '' : 'none';
-      const cdText  = t.cooldown > 0 ? `🕐 ${t.cooldown}/${t.total}` : `✅ 0/${t.total}`;
       const priceStr = t.price_sum > 0 ? `${fmtPrice(t.price_sum)}${t.currency||'$'}` : '';
+      const lockMins = isLocked ? Math.ceil(t.tag_pause_secs / 60) : 0;
+      const lockSecs = isLocked ? (t.tag_pause_secs % 60) : 0;
+      const lockLabel = isLocked ? (lockMins >= 1 ? `${lockMins}хв` : `${lockSecs}с`) : '';
+      const lockBar = isLocked ? `<div class="tag-chip-lock-bar"><span class="lock-icon">🔒</span><span class="lock-time">${lockLabel}</span><span style="color:#7a2020;font-size:10px;font-weight:400">до розлоку</span></div>` : '';
       chip.innerHTML = `
         <div class="tag-chip-header" style="pointer-events:none">
           <div class="tag-chip-name" title="${x(t.tag)}">${x(t.tag)}</div>
           <button onclick="event.stopPropagation();hideTag('${x(t.tag)}')" style="pointer-events:auto;background:none;border:none;color:#444;cursor:pointer;font-size:11px;padding:0;line-height:1;flex-shrink:0" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='#444'">✕</button>
         </div>
+        ${lockBar}
         <div class="tag-chip-body" style="pointer-events:none">
           ${priceStr ? `<div class="tag-chip-price">${x(priceStr)}</div>` : '<div></div>'}
           <div style="display:flex;align-items:baseline;gap:1px">

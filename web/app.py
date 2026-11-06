@@ -1001,11 +1001,20 @@ def get_cooldown_stats():
                     currency = "$"
             except (TypeError, ValueError):
                 pass
+        # Collect tag-level pause across all engines for this tag
+        tag_pause_until = 0.0
+        for engine in sched_mgr._engines.values():
+            tp = engine._tag_pauses.get(tag, 0)
+            if tp > tag_pause_until:
+                tag_pause_until = tp
+        tag_pause_secs = max(0, int(tag_pause_until - now)) if tag_pause_until > now else 0
+
         result.append({
             "tag": tag, "total": total, "cooldown": on_cd,
             "price_sum": round(price_sum, 2), "currency": currency,
             "sticky_current": sticky_current,
             "sticky_target": tag_sticky.get(tag, 0),
+            "tag_pause_secs": tag_pause_secs,
         })
     return sorted(result, key=lambda r: r["tag"])
 
