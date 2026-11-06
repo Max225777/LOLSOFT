@@ -182,8 +182,9 @@ def fetch_all_my_items(token: str) -> list[dict]:
 _tag_items_cache: dict[str, list[dict]] = {}
 _cache_loaded_at: str = ""
 
-# Global queue lock: only 1 bump_tick runs at a time across ALL markets
-_global_bump_lock = threading.Lock()
+# Per-market locks are used (self._bump_lock); no global serialization needed
+# Global semaphore: max 3 concurrent LOLZ bump API calls across all markets
+_bump_api_sem = threading.Semaphore(3)
 
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
@@ -476,17 +477,17 @@ class MarketEngine:
             broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
 
     def bump_tick(self, manual: bool = False):
-        # all bumps (auto + manual, all markets) are serialized via global lock
+        # per-market lock: skip tick if this market is already running
         if manual:
-            acquired = _global_bump_lock.acquire(blocking=True, timeout=60)
+            acquired = self._bump_lock.acquire(blocking=True, timeout=60)
         else:
-            acquired = _global_bump_lock.acquire(blocking=False)
+            acquired = self._bump_lock.acquire(blocking=False)
         if not acquired:
             return
         try:
             self._bump_tick_inner(manual=manual)
         finally:
-            _global_bump_lock.release()
+            self._bump_lock.release()
 
     def _bump_tick_inner(self, manual: bool = False):
         global _api_limit_until
@@ -614,8 +615,9 @@ class MarketEngine:
                 if self._cooldowns.get(iid, 0) > now:
                     continue
 
-                time.sleep(0.2)
-                ok, reason = bump_item(token, iid)
+                with _bump_api_sem:
+                    time.sleep(0.3)
+                    ok, reason = bump_item(token, iid)
                 api_tried += 1
 
                 if ok:
