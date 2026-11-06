@@ -516,6 +516,7 @@ class MarketEngine:
                 continue
 
             title = it.get("title") or it.get("title_en") or f"#{iid}"
+            time.sleep(0.2)  # 200ms between bump calls to avoid LOLZ rate-lock
             ok, reason = bump_item(token, iid)
             api_tried += 1  # count actual API calls (no hard cap)
 
