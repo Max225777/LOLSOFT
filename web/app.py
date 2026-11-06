@@ -390,6 +390,8 @@ class MarketEngine:
         self._tag_pauses:    dict[str, float] = {}   # tag_name → pause_until (whole-tag cooldown)
         self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
         self._stick_blocked:   set[str] = set()  # item_ids that returned 403 on stick
+        self._pinned_this_tick: dict[str, set] = {}  # tag → set of iids pinned in current tick
+        self._stick_lock = threading.Lock()      # serialize stick/unstick operations per market
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
         self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
 
@@ -694,7 +696,12 @@ class MarketEngine:
         if target <= 0:
             return
 
-        tag_items = items_for_tag(tag)
+        with self._stick_lock:
+            self._auto_stick_locked(token, name, tag, iid, it, target)
+
+    def _auto_stick_locked(self, token: str, name: str, tag: str, iid: str, it: dict, target: int):
+        # read live cache state (not a copy) so parallel bumps see each other's pins
+        tag_items = _tag_items_cache.get(tag.strip(), [])
         pinned = [x for x in tag_items if _is_pinned(x)]
         already_pinned = any(str(x.get("item_id", "")) == iid for x in pinned)
 
@@ -775,9 +782,9 @@ class SchedulerManager:
         self._sched.remove_all_jobs()
         self._engines.clear()
 
-        # always load cache on reload and schedule hourly refresh
+        # always load cache on reload and schedule 15-min refresh
         threading.Thread(target=self._warmup_cache, daemon=True).start()
-        self._sched.add_job(_safe_job(self._warmup_cache), "interval", hours=1,
+        self._sched.add_job(_safe_job(self._warmup_cache), "interval", minutes=15,
                             id="cache_refresh", replace_existing=True)
 
         if not cfg.get("autobump", False) and not cfg.get("autorefresh", False):
@@ -842,8 +849,54 @@ class SchedulerManager:
             total = sum(len(v) for v in cache.values())
             broadcaster.emit(
                 f"━━━ ✅ КЕШ ГОТОВИЙ: {len(all_items)} лотів | {total} по тегах | {_cache_loaded_at} ━━━", "ok")
+            self._reset_pins(token)
         except Exception as e:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
+
+    def _reset_pins(self, token: str):
+        """After cache load: unpin everything, then pin top-N per tag by most-recent bump."""
+        cfg = load_config()
+        tag_sticky: dict[str, int] = cfg.get("tag_sticky", {})
+        if not tag_sticky:
+            return
+        broadcaster.emit("📌 Перевстановлення закріплень після оновлення кешу…", "info")
+        for tag, target in tag_sticky.items():
+            if target <= 0:
+                continue
+            items = items_for_tag(tag)
+            if not items:
+                continue
+            pinned = [x for x in items if _is_pinned(x)]
+            # sort all items newest-bumped first
+            sorted_by_bump = sorted(
+                items,
+                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0,
+                reverse=True
+            )
+            should_be_pinned = {str(x.get("item_id","")) for x in sorted_by_bump[:target]}
+            currently_pinned = {str(x.get("item_id","")) for x in pinned}
+
+            # unpin items that shouldn't be pinned
+            for it in pinned:
+                iid = str(it.get("item_id",""))
+                if iid not in should_be_pinned:
+                    ok, err = unstick_item(token, iid)
+                    if ok:
+                        it["is_pinned"] = False; it["is_sticky"] = False
+                        broadcaster.emit(f"📌 [{tag}] знято зайве: {it.get('title','?')[:40]}", "info")
+                    elif "[403]" not in err:
+                        broadcaster.emit(f"⚠ [{tag}] не вдалось зняти {iid}: {err}", "warn")
+
+            # pin items that should be pinned but aren't
+            for it in sorted_by_bump[:target]:
+                iid = str(it.get("item_id",""))
+                if iid not in currently_pinned:
+                    ok, err = stick_item(token, iid)
+                    if ok:
+                        it["is_pinned"] = True; it["is_sticky"] = True
+                        broadcaster.emit(f"📌 [{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
+                    elif "[403]" not in err:
+                        broadcaster.emit(f"⚠ [{tag}] не вдалось закріпити {iid}: {err}", "warn")
 
 sched_mgr = SchedulerManager()
 
