@@ -467,20 +467,6 @@ class MarketEngine:
             broadcaster.emit(f"⚠ [{name}] _is_active_hours помилка: {e}", "warn")
             return True
 
-    def _log_active_hours_state(self):
-        """Call once per tick to log hours check state — for debugging only."""
-        name = self.cfg.get("name", "?")
-        ignore = self.cfg.get("ignore_hours", False)
-        work_from = self.cfg.get("work_from", "")
-        work_to   = self.cfg.get("work_to", "")
-        now = datetime.now(_KYIV_TZ).strftime("%H:%M")
-        if ignore:
-            broadcaster.emit(f"🕐 [{name}] hours: ignore_hours=True → завжди активний", "info")
-        elif not work_from or not work_to:
-            broadcaster.emit(f"🕐 [{name}] hours: work_from={work_from!r} work_to={work_to!r} → не задано → завжди активний", "info")
-        else:
-            result = work_from <= now <= work_to
-            broadcaster.emit(f"🕐 [{name}] hours: {work_from} <= {now} <= {work_to} → {'активний' if result else 'НЕАКТИВНИЙ'}", "info")
 
     def refresh_tick(self):
         if not self.cfg.get("enabled", True):
@@ -516,7 +502,6 @@ class MarketEngine:
         global _api_limit_until
         if not self.cfg.get("enabled", True):
             return
-        self._log_active_hours_state()
         # always purge expired cooldowns regardless of working hours
         _now = time.time()
         expired = [k for k, v in list(self._cooldowns.items()) if v <= _now]
