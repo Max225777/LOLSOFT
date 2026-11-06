@@ -664,21 +664,23 @@ class SchedulerManager:
         if not cfg.get("autobump", False) and not cfg.get("autorefresh", False):
             return
 
-        for mkt in cfg.get("markets", []):
-            if not mkt.get("enabled", True):
-                continue
+        active_markets = [m for m in cfg.get("markets", []) if m.get("enabled", True)]
+        for idx, mkt in enumerate(active_markets):
             name    = mkt.get("name", "?")
             engine  = MarketEngine(mkt, self._token)
             self._engines[name] = engine
+            stagger = idx * 5  # 5s offset between markets
 
             if cfg.get("autorefresh", False):
                 ri = max(30, mkt.get("refresh_interval", 60))
                 self._sched.add_job(_safe_job(engine.refresh_tick), "interval", seconds=ri,
+                                    start_date=datetime.now(_KYIV_TZ) + timedelta(seconds=stagger),
                                     id=f"refresh_{name}", replace_existing=True)
 
             if cfg.get("autobump", False):
                 bi = max(30, mkt.get("bump_interval", 60))
                 self._sched.add_job(_safe_job(engine.bump_tick), "interval", seconds=bi,
+                                    start_date=datetime.now(_KYIV_TZ) + timedelta(seconds=stagger),
                                     id=f"bump_{name}", replace_existing=True)
 
 
