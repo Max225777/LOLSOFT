@@ -343,7 +343,8 @@ function buildStatusCard(m) {
       <span style="color:${statusColor};font-size:13px">${statusText}</span>
       <span style="font-size:10px;color:var(--sub)">${hours}</span>
       <div class="spacer"></div>
-      <button class="btn-s" onclick="bumpNow('${x(m.name)}')" style="padding:2px 8px;font-size:10px">⚡</button>
+      <button class="btn-s" onclick="bumpNow('${x(m.name)}')" style="padding:2px 8px;font-size:10px" title="Підняти зараз">⚡</button>
+      <button class="btn-s" onclick="dryRun('${x(m.name)}')" style="padding:2px 8px;font-size:10px" title="Сухий прогін — показати час останнього підняття">🧪</button>
     </div>
     <div style="overflow-x:auto">
       <table class="lst-table">
@@ -990,6 +991,13 @@ async function bumpNow(name) {
   try {
     await api('/api/bump-now/'+encodeURIComponent(name), {method:'POST'});
     toast('⚡ Підняття: '+name);
+  } catch(e) { toast('⛔ '+e.message, false); }
+}
+
+async function dryRun(name) {
+  try {
+    await api('/api/dry-run/'+encodeURIComponent(name), {method:'POST'});
+    toast('🧪 Тест: '+name);
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 

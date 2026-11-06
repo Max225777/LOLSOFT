@@ -393,6 +393,58 @@ class MarketEngine:
     def get_token(self) -> str:
         return self.token_fn()
 
+    def dry_run_tick(self):
+        """Fetch items per tag and log last-bump time without calling bump API."""
+        token = self.get_token()
+        if not token:
+            return
+        name = self.cfg.get("name", "?")
+        active_tags = [
+            (t.get("tag", "").strip(), max(1, t.get("count", 1)))
+            for t in self.cfg.get("tags", [])
+            if t.get("tag", "").strip()
+        ]
+        if not active_tags:
+            broadcaster.emit(f"🧪 [{name}] немає тегів", "warn")
+            return
+        now = time.time()
+        broadcaster.emit(f"🧪 [{name}] сухий прогін — {len(active_tags)} тегів", "info")
+        for tag, bumps_needed in active_tags:
+            tag_id = _tag_id_map.get(tag)
+            if not tag_id:
+                broadcaster.emit(f"🧪 [{name}][{tag}] tag_id не знайдено", "warn")
+                continue
+            try:
+                items = fetch_tag_items_sorted(token, tag_id)
+            except Exception as e:
+                broadcaster.emit(f"🧪 [{name}][{tag}] помилка: {e}", "warn")
+                continue
+            if not items:
+                broadcaster.emit(f"🧪 [{name}][{tag}] 0 лотів", "warn")
+                continue
+            for idx, it in enumerate(items[:bumps_needed + 2]):
+                iid   = str(it.get("item_id", ""))
+                title = it.get("title") or it.get("title_en") or f"#{iid}"
+                pdate = it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+                lot_link = f"[{title}](https://lzt.market/{iid}/)"
+                if pdate:
+                    secs_ago = int(now - pdate)
+                    if secs_ago < 3600:
+                        ago = f"{secs_ago // 60}хв тому"
+                    elif secs_ago < 86400:
+                        h = secs_ago // 3600
+                        m = (secs_ago % 3600) // 60
+                        ago = f"{h}год {m}хв тому"
+                    else:
+                        d = secs_ago // 86400
+                        h = (secs_ago % 86400) // 3600
+                        ago = f"{d}д {h}год тому"
+                    ready = "✅ вільний" if secs_ago >= self.ITEM_COOLDOWN_SEC else f"🔒 ще {(self.ITEM_COOLDOWN_SEC - secs_ago)//60}хв"
+                else:
+                    ago = "невідомо"
+                    ready = "?"
+                broadcaster.emit(f"🧪 [{name}][{tag}] #{idx+1} {lot_link} — {ago} | {ready}", "info")
+
     def _is_active_hours(self) -> bool:
         if self.cfg.get("ignore_hours", False):
             return True
@@ -1092,6 +1144,14 @@ def bump_now(market_name: str):
     if not engine:
         raise HTTPException(404, "Market not found or inactive")
     threading.Thread(target=engine.bump_tick, kwargs={"manual": True}, daemon=True).start()
+    return {"ok": True}
+
+@app.post("/api/dry-run/{market_name}")
+def dry_run(market_name: str):
+    engine = sched_mgr._engines.get(market_name)
+    if not engine:
+        raise HTTPException(404, "Market not found or inactive")
+    threading.Thread(target=engine.dry_run_tick, daemon=True).start()
     return {"ok": True}
 
 @app.get("/api/market-listings/{market_name}")
