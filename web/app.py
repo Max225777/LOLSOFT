@@ -381,6 +381,7 @@ class MarketEngine:
         self.token_fn     = token_fn  # callable → str
         self._cooldowns:     dict[str, float] = {}   # item_id → expires_at
         self._cooldown_tags: dict[str, str]   = {}   # item_id → tag_name
+        self._tag_pauses:    dict[str, float] = {}   # tag_name → pause_until (whole-tag cooldown)
         self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
         self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
@@ -500,6 +501,13 @@ class MarketEngine:
                 except Exception as e:
                     broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
 
+            # skip entire tag if whole-tag pause is active
+            tag_pause_until = self._tag_pauses.get(tag, 0)
+            if tag_pause_until > now:
+                mins_left = int((tag_pause_until - now) / 60)
+                broadcaster.emit(f"⏳ [{name}][{tag}] пауза тегу ще {mins_left}хв", "warn")
+                continue
+
             # fetch items sorted oldest-bumped-first from LOLZ API
             try:
                 sorted_items = fetch_tag_items_sorted(token, tag_id)
@@ -547,9 +555,20 @@ class MarketEngine:
                     broadcaster.emit(f"🚫 [{name}][{tag}] {title} — ліміт, кулдаун 1 год", "warn")
 
                 elif reason.startswith("кулдаун"):
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                    # Calculate exact remaining cooldown from item's last bump timestamp
+                    up_ts = it.get("up_timestamp") or it.get("bumped_at") or 0
+                    if up_ts and up_ts > 0:
+                        elapsed = now - up_ts
+                        remaining = max(60, self.ITEM_COOLDOWN_SEC - elapsed)
+                    else:
+                        remaining = self.ITEM_COOLDOWN_SEC
+                    # Pause the entire tag — if oldest item is in cooldown, all are
+                    self._tag_pauses[tag] = now + remaining
+                    self._cooldowns[iid] = now + remaining
                     self._cooldown_tags[iid] = tag
-                    broadcaster.emit(f"⏳ [{name}][{tag}] {title} — кулдаун LOLZ, пропуск", "warn")
+                    mins_left = int(remaining / 60)
+                    broadcaster.emit(f"⏳ [{name}][{tag}] {title} — кулдаун LOLZ, пауза тегу {mins_left}хв", "warn")
+                    break  # no point trying more items in this tag
 
                 else:
                     broadcaster.emit(f"⛔ [{name}][{tag}] {title} — {reason}", "error")
