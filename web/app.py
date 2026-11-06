@@ -489,6 +489,7 @@ class MarketEngine:
             _global_bump_lock.release()
 
     def _bump_tick_inner(self, manual: bool = False):
+        global _api_limit_until
         if not self.cfg.get("enabled", True):
             return
         # always purge expired cooldowns regardless of working hours
@@ -633,7 +634,6 @@ class MarketEngine:
 
                 elif reason.startswith("ліміт"):
                     record_bump(name, tag, iid, title, False, reason)
-                    global _api_limit_until
                     _api_limit_until = now + API_LIMIT_PAUSE_SEC
                     mins = API_LIMIT_PAUSE_SEC // 60
                     broadcaster.emit(f"🚫 ліміт підняттів LOLZ — пауза всіх ринків на {mins}хв", "warn")
