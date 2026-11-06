@@ -189,33 +189,32 @@ _bump_api_sem = threading.Semaphore(3)
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
 
-def stick_item(token: str, item_id: str) -> tuple[bool, str]:
-    try:
-        resp = requests.post(f"{API_BASE}/{item_id}/stick",
-                             headers=_headers(token), timeout=15)
-        if resp.status_code in (200, 201):
-            return True, ""
+def _do_stick_request(token: str, item_id: str, method: str) -> tuple[bool, str]:
+    """method: 'POST' for stick, 'DELETE' for unstick. Retries once on 429."""
+    ok_codes = (200, 201) if method == "POST" else (200, 204)
+    for attempt in range(2):
         try:
-            msg = resp.json().get("message") or resp.json().get("error") or ""
-        except Exception:
-            msg = resp.text[:80]
-        return False, f"[{resp.status_code}] {msg[:80]}"
-    except Exception as e:
-        return False, str(e)[:80]
+            fn = requests.post if method == "POST" else requests.delete
+            resp = fn(f"{API_BASE}/{item_id}/stick", headers=_headers(token), timeout=15)
+            if resp.status_code in ok_codes:
+                return True, ""
+            if resp.status_code == 429 and attempt == 0:
+                time.sleep(2)
+                continue
+            try:
+                msg = resp.json().get("message") or resp.json().get("error") or ""
+            except Exception:
+                msg = resp.text[:80]
+            return False, f"[{resp.status_code}] {msg[:80]}"
+        except Exception as e:
+            return False, str(e)[:80]
+    return False, "[429] rate limit"
+
+def stick_item(token: str, item_id: str) -> tuple[bool, str]:
+    return _do_stick_request(token, item_id, "POST")
 
 def unstick_item(token: str, item_id: str) -> tuple[bool, str]:
-    try:
-        resp = requests.delete(f"{API_BASE}/{item_id}/stick",
-                               headers=_headers(token), timeout=15)
-        if resp.status_code in (200, 204):
-            return True, ""
-        try:
-            msg = resp.json().get("message") or resp.json().get("error") or ""
-        except Exception:
-            msg = resp.text[:80]
-        return False, f"[{resp.status_code}] {msg[:80]}"
-    except Exception as e:
-        return False, str(e)[:80]
+    return _do_stick_request(token, item_id, "DELETE")
 
 def _is_pinned(it: dict) -> bool:
     return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
@@ -616,8 +615,14 @@ class MarketEngine:
                     continue
 
                 with _bump_api_sem:
+                    # re-check inside semaphore — another market may have just set the limit
+                    if _api_limit_until > time.time():
+                        api_limit_hit = True
+                        break
                     time.sleep(0.3)
                     ok, reason = bump_item(token, iid)
+                if api_limit_hit:
+                    break
                 api_tried += 1
 
                 if ok:
