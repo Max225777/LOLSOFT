@@ -223,6 +223,37 @@ def _is_pinned(it: dict) -> bool:
 _api_limit_until: float = 0.0
 API_LIMIT_PAUSE_SEC = 300  # 5 minutes
 
+# Cached bump quota from LOLZ account info
+_bump_quota: dict = {}  # {"used": int, "limit": int, "left": int, "fetched_at": float}
+_bump_quota_lock = threading.Lock()
+
+def fetch_bump_quota(token: str) -> dict:
+    """Fetch daily bump quota from LOLZ account info. Returns dict with used/limit/left."""
+    try:
+        resp = requests.get(f"{API_BASE}/user/{MY_PROFILE_ID}",
+                            headers=_headers(token), timeout=10)
+        if resp.status_code != 200:
+            return {}
+        body = resp.json()
+        user = body.get("user") or body
+        # LOLZ returns bump stats under different keys depending on API version
+        used  = user.get("bumps_count") or user.get("items_bumped") or 0
+        limit = user.get("bumps_limit") or user.get("bumps_per_day") or 0
+        left  = user.get("bumps_left") or (max(0, limit - used) if limit else None)
+        return {"used": used, "limit": limit, "left": left, "fetched_at": time.time(), "raw_keys": list(user.keys())[:30]}
+    except Exception:
+        return {}
+
+def get_bump_quota_cached(token: str, max_age: int = 60) -> dict:
+    """Return cached bump quota, refreshing if older than max_age seconds."""
+    global _bump_quota
+    with _bump_quota_lock:
+        if not _bump_quota or (time.time() - _bump_quota.get("fetched_at", 0)) > max_age:
+            q = fetch_bump_quota(token)
+            if q:
+                _bump_quota = q
+        return dict(_bump_quota)
+
 def bump_item(token: str, item_id: str) -> tuple[bool, str]:
     try:
         resp = requests.post(f"{API_BASE}/{item_id}/bump",
@@ -1093,6 +1124,14 @@ def get_bump_limit():
         "pause_until": _api_limit_until if paused else 0,
         "pause_secs_left": max(0, int(_api_limit_until - now)) if paused else 0,
     }
+
+@app.get("/api/bump-quota")
+def get_bump_quota():
+    cfg = load_config()
+    token = cfg.get("lolz_token") or os.environ.get("LOLZ_TOKEN", "")
+    if not token:
+        return {"error": "no token"}
+    return get_bump_quota_cached(token)
 
 @app.get("/api/cooldown-stats")
 def get_cooldown_stats():

@@ -175,6 +175,7 @@ tr:hover td{background:#1e1e1e}
         <span id="sb-cache"  style="font-size:10px"></span>
         <span id="sb-jobs"   style="font-size:10px"></span>
         <span id="sb-limit"  style="font-size:10px"></span>
+        <span id="sb-quota"  style="font-size:10px"></span>
         <span id="sb-time"   style="font-size:10px;color:#333;margin-left:auto"></span>
       </div>
       <button class="btn-s" onclick="restartJobs()" title="Перезапустити планувальник" style="padding:4px 10px;font-size:12px;color:var(--text)">⟳</button>
@@ -1089,6 +1090,26 @@ async function loadServerStatus() {
   } catch(e) {}
 }
 
+async function loadBumpQuota() {
+  try {
+    const q = await fetch('/api/bump-quota').then(r=>r.json());
+    const el = document.getElementById('sb-quota');
+    if (!el) return;
+    if (q.error) { el.innerHTML = ''; return; }
+    const left = q.left, limit = q.limit, used = q.used;
+    // show only if we got meaningful data
+    if (left !== null && left !== undefined) {
+      const color = left === 0 ? 'var(--red)' : left < 10 ? 'var(--yellow)' : 'var(--sub)';
+      el.innerHTML = `<span style="color:${color}" title="Підняттів використано: ${used}/${limit}">🔼 ${left} підн.</span>`;
+    } else if (used || limit) {
+      el.innerHTML = `<span style="color:var(--sub)" title="raw: ${JSON.stringify(q.raw_keys)}">🔼 ${used}/${limit}</span>`;
+    } else {
+      // show raw keys to help figure out the right field name
+      el.innerHTML = `<span style="color:var(--sub);font-size:9px" title="${JSON.stringify(q)}">🔼 ?</span>`;
+    }
+  } catch(e) {}
+}
+
 // ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
   connectWS();
@@ -1097,9 +1118,11 @@ async function loadServerStatus() {
   loadMarketStatus();
   loadTagStats();
   loadServerStatus();
+  loadBumpQuota();
   setInterval(loadMarketStatus,  15000);
   setInterval(loadTagStats,      10000);
   setInterval(loadServerStatus,   5000);
+  setInterval(loadBumpQuota,     60000);
 })();
 </script>
 </body>
