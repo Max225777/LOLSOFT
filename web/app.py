@@ -164,6 +164,9 @@ def fetch_all_my_items(token: str) -> list[dict]:
 _tag_items_cache: dict[str, list[dict]] = {}
 _cache_loaded_at: str = ""
 
+# Global queue lock: only 1 bump_tick runs at a time across ALL markets
+_global_bump_lock = threading.Lock()
+
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
 
@@ -399,20 +402,17 @@ class MarketEngine:
             broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
 
     def bump_tick(self, manual: bool = False):
+        # all bumps (auto + manual, all markets) are serialized via global lock
         if manual:
-            if not self._manual_lock.acquire(blocking=False):
-                return  # another manual bump already running
-            try:
-                self._bump_tick_inner(manual=True)
-            finally:
-                self._manual_lock.release()
+            acquired = _global_bump_lock.acquire(blocking=True, timeout=60)
+        else:
+            acquired = _global_bump_lock.acquire(blocking=False)
+        if not acquired:
             return
-        if not self._bump_lock.acquire(blocking=False):
-            return  # scheduler tick already running, skip
         try:
-            self._bump_tick_inner()
+            self._bump_tick_inner(manual=manual)
         finally:
-            self._bump_lock.release()
+            _global_bump_lock.release()
 
     def _bump_tick_inner(self, manual: bool = False):
         if not self.cfg.get("enabled", True):
