@@ -219,6 +219,10 @@ def unstick_item(token: str, item_id: str) -> tuple[bool, str]:
 def _is_pinned(it: dict) -> bool:
     return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
 
+# Global API limit pause: when LOLZ returns "ліміт", all markets pause until this time
+_api_limit_until: float = 0.0
+API_LIMIT_PAUSE_SEC = 300  # 5 minutes
+
 def bump_item(token: str, item_id: str) -> tuple[bool, str]:
     try:
         resp = requests.post(f"{API_BASE}/{item_id}/bump",
@@ -441,6 +445,12 @@ class MarketEngine:
         for k in expired:
             del self._cooldowns[k]
             self._cooldown_tags.pop(k, None)
+        # global API limit pause — all markets wait until limit resets
+        if _api_limit_until > _now and not manual:
+            secs_left = int(_api_limit_until - _now)
+            name = self.cfg.get("name", "?")
+            broadcaster.emit(f"⏳ [{name}] пауза ліміту — ще {secs_left//60}хв {secs_left%60}с", "warn")
+            return
         if not self._is_active_hours() and not manual:
             name     = self.cfg.get("name","?")
             work_from = self.cfg.get("work_from","")
@@ -571,7 +581,10 @@ class MarketEngine:
 
                 elif reason.startswith("ліміт"):
                     record_bump(name, tag, iid, title, False, reason)
-                    broadcaster.emit(f"🚫 [{name}] ліміт підняттів — зупинка тіку", "warn")
+                    global _api_limit_until
+                    _api_limit_until = now + API_LIMIT_PAUSE_SEC
+                    mins = API_LIMIT_PAUSE_SEC // 60
+                    broadcaster.emit(f"🚫 ліміт підняттів LOLZ — пауза всіх ринків на {mins}хв", "warn")
                     api_limit_hit = True
                     break  # stop items loop; outer loop also breaks via api_limit_hit flag
 
@@ -792,6 +805,7 @@ def get_status():
             "tags": active_tags,
             "cooldowns": cd_count,
         })
+    limit_paused = _api_limit_until > now
     return {
         "token_ok": token_ok,
         "jobs_count": len(jobs),
@@ -799,6 +813,8 @@ def get_status():
         "cache_loaded_at": _cache_loaded_at,
         "markets": markets_info,
         "server_time": datetime.now(_KYIV_TZ).strftime("%H:%M:%S"),
+        "api_limit_paused": limit_paused,
+        "api_limit_secs_left": max(0, int(_api_limit_until - now)) if limit_paused else 0,
     }
 
 class ConfigIn(BaseModel):
@@ -995,6 +1011,16 @@ def get_cooldowns_detail():
             })
     rows.sort(key=lambda r: r["secs_left"])
     return {"total": len(rows), "items": rows}
+
+@app.get("/api/bump-limit")
+def get_bump_limit():
+    now = time.time()
+    paused = _api_limit_until > now
+    return {
+        "paused": paused,
+        "pause_until": _api_limit_until if paused else 0,
+        "pause_secs_left": max(0, int(_api_limit_until - now)) if paused else 0,
+    }
 
 @app.get("/api/cooldown-stats")
 def get_cooldown_stats():
