@@ -179,6 +179,10 @@ tr:hover td{background:#1e1e1e}
       <button class="btn-s" onclick="openOverlay('settings')" style="padding:4px 12px;font-size:12px;font-weight:600;color:var(--text)">⚙ Налаштування</button>
     </div>
     <div id="left-panel-body">
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:4px">
+        <button id="btn-day-today" onclick="loadDayStats('today')" style="flex:1;padding:3px 0;font-size:11px;background:var(--accent);color:#fff;border:none;border-radius:4px 0 0 4px;cursor:pointer">Сьогодні</button>
+        <button id="btn-day-yest"  onclick="loadDayStats('yesterday')" style="flex:1;padding:3px 0;font-size:11px;background:var(--bg2);color:var(--sub);border:1px solid var(--border);border-left:none;border-radius:0 4px 4px 0;cursor:pointer">Вчора</button>
+      </div>
       <div id="day-stats" class="stat-grid"></div>
       <div id="status-list"></div>
     </div>
@@ -261,9 +265,20 @@ async function loadCfg() {
 }
 
 // ── day stats ─────────────────────────────────────────────────────────────────
-async function loadDayStats() {
+async function loadDayStats(date='today') {
+  const btnToday = document.getElementById('btn-day-today');
+  const btnYest  = document.getElementById('btn-day-yest');
+  if (btnToday && btnYest) {
+    if (date === 'yesterday') {
+      btnToday.style.background='var(--bg2)'; btnToday.style.color='var(--sub)'; btnToday.style.border='1px solid var(--border)';
+      btnYest.style.background='var(--accent)'; btnYest.style.color='#fff'; btnYest.style.border='none';
+    } else {
+      btnToday.style.background='var(--accent)'; btnToday.style.color='#fff'; btnToday.style.border='none';
+      btnYest.style.background='var(--bg2)'; btnYest.style.color='var(--sub)'; btnYest.style.border='1px solid var(--border)';
+    }
+  }
   try {
-    const s = await api('/api/day-stats');
+    const s = await api('/api/day-stats?date='+date);
     const el = document.getElementById('day-stats');
     if (!el) return;
     const tile = (val, lbl, color) =>

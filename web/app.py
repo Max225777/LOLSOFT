@@ -883,12 +883,17 @@ def refresh_tags():
     return {"ok": True}
 
 @app.get("/api/day-stats")
-def day_stats():
+def day_stats(date: str = "today"):
     conn = db_conn()
-    today = "date('now','localtime')"
+    if date == "yesterday":
+        day_filter = "date('now','localtime','-1 day')"
+        day_end    = "date('now','localtime')"
+        where = f"logged_at >= {day_filter} AND logged_at < {day_end}"
+    else:
+        day_filter = "date('now','localtime')"
+        where = f"logged_at >= {day_filter}"
     rows = conn.execute(
-        f"SELECT market_name, success, reason FROM bumps"
-        f" WHERE logged_at >= {today}"
+        f"SELECT market_name, success, reason FROM bumps WHERE {where}"
     ).fetchall()
     conn.close()
     total = len(rows)
