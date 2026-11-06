@@ -881,23 +881,29 @@ async function refreshMarketItems(name) {
   } catch(e) { toast('⛔ '+e.message, false); }
 }
 
+function _log(text, level='info') {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  addLogLine({text, level, time:`${hh}:${mm}:${ss}`});
+}
 async function checkCooldowns() {
   const btn = document.getElementById('btn-check-cooldowns');
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   try {
     const data = await api('/api/cooldowns-detail');
     const locked = data.items || [];
-    addLogLine(`━━━ 🔒 ПЕРЕВІРКА КУЛДАУНІВ: залочено ${locked.length} ━━━`);
+    _log(`━━━ 🔒 КУЛДАУНИ: залочено ${locked.length} ━━━`, 'ok');
     if (locked.length === 0) {
-      addLogLine('✅ Всі лоти вільні');
+      _log('✅ Всі лоти вільні', 'ok');
     } else {
       for (const it of locked) {
-        addLogLine(`🔒 [${it.market}][${it.tag}] ${it.title} — ще ${it.mins_left}хв`);
+        _log(`🔒 [${it.market}][${it.tag}] ${it.title} — ще ${it.mins_left}хв`, 'warn');
       }
     }
-    addLogLine(`━━━ кінець ━━━`);
   } catch(e) {
-    addLogLine('⚠ Не вдалось перевірити кулдауни: ' + e);
+    _log('⚠ Не вдалось перевірити кулдауни: ' + e, 'error');
   } finally {
     if (btn) { btn.textContent = '🔒'; btn.disabled = false; }
   }
