@@ -483,7 +483,10 @@ class MarketEngine:
             del self._cooldowns[k]
             self._cooldown_tags.pop(k, None)
 
+        api_limit_hit = False
         for tag, bumps_needed in active_tags:
+            if api_limit_hit:
+                break
             tag_id = _tag_id_map.get(tag)
             if not tag_id:
                 broadcaster.emit(f"⚠ [{name}][{tag}] tag_id не знайдено", "warn")
@@ -567,10 +570,10 @@ class MarketEngine:
                     broadcaster.emit(f"🗑 [{name}][{tag}] {lot_link} — не знайдено", "warn")
 
                 elif reason.startswith("ліміт"):
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    self._cooldown_tags[iid] = tag
                     record_bump(name, tag, iid, title, False, reason)
-                    broadcaster.emit(f"🚫 [{name}][{tag}] {lot_link} — ліміт API", "warn")
+                    broadcaster.emit(f"🚫 [{name}] ліміт підняттів — зупинка тіку", "warn")
+                    api_limit_hit = True
+                    break  # stop items loop; outer loop also breaks via api_limit_hit flag
 
                 elif reason.startswith("кулдаун"):
                     # LOLZ says cooldown despite pdate check — calculate from pdate
