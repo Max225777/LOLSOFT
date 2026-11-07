@@ -222,7 +222,7 @@ def _is_pinned(it: dict) -> bool:
 
 # Global API limit pause: when LOLZ returns "ліміт", all markets pause until this time
 _api_limit_until: float = 0.0
-API_LIMIT_PAUSE_SEC = 300  # 5 minutes
+API_LIMIT_PAUSE_SEC = 120  # 2 minutes
 
 def bump_item(token: str, item_id: str) -> tuple[bool, str]:
     try:
@@ -651,7 +651,7 @@ class MarketEngine:
                 record_bump(name, tag, iid, title, False, reason)
                 _api_limit_until = now + API_LIMIT_PAUSE_SEC
                 mins = API_LIMIT_PAUSE_SEC // 60
-                broadcaster.emit(f"🚫 [{name}] денний ліміт підняттів — пауза всіх ринків на {mins}хв", "warn")
+                broadcaster.emit(f"🚫 [{name}][{tag}] {lot_link} — ліміт підняттів, пауза всіх ринків на {mins}хв", "warn")
 
             elif reason.startswith("ratelimit"):
                 broadcaster.emit(f"⏱ [{name}][{tag}] rate limit LOLZ — пауза 30с", "warn")
