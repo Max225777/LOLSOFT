@@ -661,6 +661,9 @@ class MarketEngine:
                     broadcaster.emit(f"⚠ [{name}][{tag}] {lot_link} — 403 заборонено", "warn")
                     self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                     self._cooldown_tags[iid] = tag
+                    # pause entire tag for 5 min on 403 — LOLZ blocks whole account/tag temporarily
+                    self._tag_pauses[tag] = now + 300
+                    break
 
                 elif reason.startswith("кулдаун"):
                     # LOLZ says cooldown despite pdate check — calculate from pdate
