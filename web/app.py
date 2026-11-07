@@ -184,7 +184,8 @@ _cache_loaded_at: str = ""
 
 # Per-market locks are used (self._bump_lock); no global serialization needed
 # Global semaphore: max 3 concurrent LOLZ bump API calls across all markets
-_bump_api_sem = threading.Semaphore(3)
+_bump_api_sem  = threading.Semaphore(3)
+_market_queue  = threading.Semaphore(1)   # only 1 market bumps at a time
 
 def items_for_tag(tag: str) -> list[dict]:
     return list(_tag_items_cache.get(tag.strip(), []))
@@ -494,7 +495,9 @@ class MarketEngine:
         if not acquired:
             return
         try:
-            self._bump_tick_inner(manual=manual)
+            # global queue: only 1 market runs at a time — no overlapping API calls
+            with _market_queue:
+                self._bump_tick_inner(manual=manual)
         finally:
             self._bump_lock.release()
 
@@ -661,9 +664,6 @@ class MarketEngine:
                     broadcaster.emit(f"⚠ [{name}][{tag}] {lot_link} — 403 заборонено", "warn")
                     self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                     self._cooldown_tags[iid] = tag
-                    # pause entire tag for 5 min on 403 — LOLZ blocks whole account/tag temporarily
-                    self._tag_pauses[tag] = now + 300
-                    break
 
                 elif reason.startswith("кулдаун"):
                     # LOLZ says cooldown despite pdate check — calculate from pdate
