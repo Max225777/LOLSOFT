@@ -552,17 +552,36 @@ class MarketEngine:
 
         now = time.time()
 
-        # --- 1 bump per tick: select current active tag ---
+        # --- 1 bump per tick: select current active tag, skip paused ones ---
         num_tags = len(tag_cfgs)
-        # Normalize index in case tags list changed
         self._current_tag_idx = self._current_tag_idx % num_tags
-        tag_cfg     = tag_cfgs[self._current_tag_idx]
-        tag         = tag_cfg.get("tag", "").strip()
-        bumps_quota = max(1, tag_cfg.get("count", 1))  # rotate after this many bumps
 
-        tag_id = _tag_id_map.get(tag)
-        if not tag_id:
-            broadcaster.emit(f"⚠ [{name}][{tag}] tag_id не знайдено", "warn")
+        # Try each tag in order starting from current; skip paused/unavailable ones
+        tag_cfg = tag = tag_id = bumps_quota = None
+        for _attempt in range(num_tags):
+            idx     = (self._current_tag_idx + _attempt) % num_tags
+            _tcfg   = tag_cfgs[idx]
+            _tag    = _tcfg.get("tag", "").strip()
+            _tag_id = _tag_id_map.get(_tag)
+            if not _tag_id:
+                broadcaster.emit(f"⚠ [{name}][{_tag}] tag_id не знайдено", "warn")
+                continue
+            _pause = self._tag_pauses.get(_tag, 0)
+            if _pause > now:
+                mins_left = int((_pause - now) / 60)
+                broadcaster.emit(f"⏳ [{name}][{_tag}] пауза тегу ще {mins_left}хв — пропуск", "warn")
+                continue
+            # Found an available tag
+            tag_cfg     = _tcfg
+            tag         = _tag
+            tag_id      = _tag_id
+            bumps_quota = max(1, _tcfg.get("count", 1))
+            # Advance _current_tag_idx to this tag so next tick starts here
+            self._current_tag_idx = idx
+            break
+
+        if tag is None:
+            broadcaster.emit(f"⏳ [{name}] всі теги на паузі — пропуск тіку", "warn")
             return
 
         # top-N check: if our item already in top-N, skip this tick
@@ -576,13 +595,6 @@ class MarketEngine:
                     return
             except Exception as e:
                 broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
-
-        # whole-tag pause active?
-        tag_pause_until = self._tag_pauses.get(tag, 0)
-        if tag_pause_until > now:
-            mins_left = int((tag_pause_until - now) / 60)
-            broadcaster.emit(f"⏳ [{name}][{tag}] пауза тегу ще {mins_left}хв", "warn")
-            return
 
         # fetch items sorted oldest-bumped-first from LOLZ API
         try:
