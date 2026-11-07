@@ -594,6 +594,7 @@ class MarketEngine:
 
             bumped_count = 0
             api_tried = 0
+            consec_403 = 0
             for it in sorted_items:
                 if bumped_count >= bumps_needed:
                     break
@@ -638,6 +639,7 @@ class MarketEngine:
                     broadcaster.emit(f"✅ [{name}][{tag}] {lot_link}  ({bumped_count+1}/{bumps_needed})", "ok")
                     record_bump(name, tag, iid, title, True, "")
                     bumped_count += 1
+                    consec_403 = 0
                     self._auto_stick_after_bump(token, name, tag, iid, it)
 
                 elif reason.startswith("продано/видалено"):
@@ -664,6 +666,10 @@ class MarketEngine:
                     broadcaster.emit(f"⚠ [{name}][{tag}] {lot_link} — 403 заборонено", "warn")
                     self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                     self._cooldown_tags[iid] = tag
+                    consec_403 += 1
+                    if consec_403 >= 3:
+                        self._tag_pauses[tag] = now + 300
+                        break
 
                 elif reason.startswith("кулдаун"):
                     # LOLZ says cooldown despite pdate check — calculate from pdate
