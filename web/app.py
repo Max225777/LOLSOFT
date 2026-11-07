@@ -395,6 +395,8 @@ class MarketEngine:
         self._stick_lock = threading.Lock()      # serialize stick/unstick operations per market
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
         self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
+        self._current_tag_idx: int = 0           # which tag we're currently bumping
+        self._tag_bump_count:  int = 0           # bumps done on current tag so far
 
     def get_token(self) -> str:
         return self.token_fn()
@@ -542,160 +544,139 @@ class MarketEngine:
         url   = self.cfg.get("url", "")
         top_n = self.cfg.get("top_n", 1)
 
-        # Build active tag list: [(tag, count), ...]
-        active_tags = [
-            (t.get("tag", "").strip(), max(1, t.get("count", 1)))
-            for t in self.cfg.get("tags", [])
-            if t.get("tag", "").strip()
-        ]
-        if not active_tags:
+        # Build active tag list: [{tag, count}, ...]
+        tag_cfgs = [t for t in self.cfg.get("tags", []) if t.get("tag", "").strip()]
+        if not tag_cfgs:
             broadcaster.emit(f"⚠ [{name}] немає тегів", "warn")
             return
 
         now = time.time()
-        api_limit_hit = False
-        for tag, bumps_needed in active_tags:
-            if api_limit_hit:
-                break
-            tag_id = _tag_id_map.get(tag)
-            if not tag_id:
-                broadcaster.emit(f"⚠ [{name}][{tag}] tag_id не знайдено", "warn")
-                continue
 
-            # top-N check
-            if url and top_n > 0:
-                try:
-                    listings = fetch_listings(url, token, top_n)
-                    top_ids  = {lot["id"] for lot in listings[:top_n]}
-                    my_ids_cache = {str(it.get("item_id","")) for it in items_for_tag(tag)}
-                    if top_ids & my_ids_cache:
-                        broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
-                        continue
-                except Exception as e:
-                    broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
+        # --- 1 bump per tick: select current active tag ---
+        num_tags = len(tag_cfgs)
+        # Normalize index in case tags list changed
+        self._current_tag_idx = self._current_tag_idx % num_tags
+        tag_cfg     = tag_cfgs[self._current_tag_idx]
+        tag         = tag_cfg.get("tag", "").strip()
+        bumps_quota = max(1, tag_cfg.get("count", 1))  # rotate after this many bumps
 
-            # skip entire tag if whole-tag pause is active
-            tag_pause_until = self._tag_pauses.get(tag, 0)
-            if tag_pause_until > now:
-                mins_left = int((tag_pause_until - now) / 60)
-                broadcaster.emit(f"⏳ [{name}][{tag}] пауза тегу ще {mins_left}хв", "warn")
-                continue
+        tag_id = _tag_id_map.get(tag)
+        if not tag_id:
+            broadcaster.emit(f"⚠ [{name}][{tag}] tag_id не знайдено", "warn")
+            return
 
-            # fetch items sorted oldest-bumped-first from LOLZ API
+        # top-N check: if our item already in top-N, skip this tick
+        if url and top_n > 0:
             try:
-                sorted_items = fetch_tag_items_sorted(token, tag_id)
+                listings = fetch_listings(url, token, top_n)
+                top_ids  = {lot["id"] for lot in listings[:top_n]}
+                my_ids_cache = {str(it.get("item_id","")) for it in items_for_tag(tag)}
+                if top_ids & my_ids_cache:
+                    broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
+                    return
             except Exception as e:
-                broadcaster.emit(f"⚠ [{name}][{tag}] отримання лотів: {e}", "warn")
-                continue
+                broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
 
-            if not sorted_items:
-                broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено", "warn")
-                continue
+        # whole-tag pause active?
+        tag_pause_until = self._tag_pauses.get(tag, 0)
+        if tag_pause_until > now:
+            mins_left = int((tag_pause_until - now) / 60)
+            broadcaster.emit(f"⏳ [{name}][{tag}] пауза тегу ще {mins_left}хв", "warn")
+            return
 
-            bumped_count = 0
-            api_tried = 0
-            consec_403 = 0
-            for it in sorted_items:
-                if bumped_count >= bumps_needed:
-                    break
-                iid = str(it.get("item_id", ""))
-                title = it.get("title") or it.get("title_en") or f"#{iid}"
-                lot_link = f"[{title}](https://lzt.market/{iid}/)"
+        # fetch items sorted oldest-bumped-first from LOLZ API
+        try:
+            sorted_items = fetch_tag_items_sorted(token, tag_id)
+        except Exception as e:
+            broadcaster.emit(f"⚠ [{name}][{tag}] отримання лотів: {e}", "warn")
+            return
 
-                # refreshed_date is the actual last-bump timestamp in LOLZ API responses
-                pdate = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
+        if not sorted_items:
+            broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено", "warn")
+            return
 
-                # pre-check: if refreshed_date says item was bumped less than 1h ago — skip without API call
-                if pdate and (now - pdate) < self.ITEM_COOLDOWN_SEC:
-                    remaining = int(self.ITEM_COOLDOWN_SEC - (now - pdate))
-                    self._cooldowns[iid] = now + remaining
-                    self._cooldown_tags[iid] = tag
-                    # if even the oldest item is still in cooldown → pause whole tag
-                    if it is sorted_items[0]:
-                        self._tag_pauses[tag] = now + remaining
-                        mins_left = int(remaining / 60)
-                        broadcaster.emit(f"⏳ [{name}][{tag}] {lot_link} — ще {mins_left}хв кд (pdate), пауза тегу", "warn")
-                        break
-                    continue
+        # Find the first item ready to bump (oldest with refreshed_date >= 60 min)
+        for it in sorted_items:
+            iid   = str(it.get("item_id", ""))
+            title = it.get("title") or it.get("title_en") or f"#{iid}"
+            lot_link = f"[{title}](https://lzt.market/{iid}/)"
 
-                # skip if our in-memory cooldown says it was recently bumped
-                if self._cooldowns.get(iid, 0) > now:
-                    continue
+            pdate = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
 
-                with _bump_api_sem:
-                    # re-check inside semaphore — another market may have just set the limit
-                    if _api_limit_until > time.time():
-                        api_limit_hit = True
-                        break
-                    time.sleep(0.3)
-                    ok, reason = bump_item(token, iid)
-                if api_limit_hit:
-                    break
-                api_tried += 1
-
-                if ok:
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    self._cooldown_tags[iid] = tag
-                    broadcaster.emit(f"✅ [{name}][{tag}] {lot_link}  ({bumped_count+1}/{bumps_needed})", "ok")
-                    record_bump(name, tag, iid, title, True, "")
-                    bumped_count += 1
-                    consec_403 = 0
-                    self._auto_stick_after_bump(token, name, tag, iid, it)
-
-                elif reason.startswith("продано/видалено"):
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    self._cooldown_tags[iid] = tag
-                    record_bump(name, tag, iid, title, False, reason)
-                    broadcaster.emit(f"🗑 [{name}][{tag}] {lot_link} — не знайдено", "warn")
-
-                elif reason.startswith("ліміт"):
-                    record_bump(name, tag, iid, title, False, reason)
-                    _api_limit_until = now + API_LIMIT_PAUSE_SEC
-                    mins = API_LIMIT_PAUSE_SEC // 60
-                    broadcaster.emit(f"🚫 денний ліміт підняттів LOLZ — пауза всіх ринків на {mins}хв", "warn")
-                    api_limit_hit = True
-                    break
-
-                elif reason.startswith("ratelimit"):
-                    # per-minute API rate limit — short pause for this market only, not global
-                    broadcaster.emit(f"⏱ [{name}][{tag}] rate limit LOLZ — пауза 30с", "warn")
-                    time.sleep(30)
-                    break  # restart tag next tick
-
-                elif reason.startswith("заборонено"):
-                    broadcaster.emit(f"⚠ [{name}][{tag}] {lot_link} — 403 заборонено", "warn")
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    self._cooldown_tags[iid] = tag
-                    consec_403 += 1
-                    if consec_403 >= 3:
-                        self._tag_pauses[tag] = now + 300
-                        break
-
-                elif reason.startswith("кулдаун"):
-                    # LOLZ says cooldown despite pdate check — calculate from pdate
-                    if pdate and pdate > 0:
-                        remaining = max(60, self.ITEM_COOLDOWN_SEC - (now - pdate))
-                    else:
-                        remaining = self.ITEM_COOLDOWN_SEC
-                    # Pause the entire tag — if oldest item is in cooldown, all are
+            # pre-check: refreshed_date says bumped < 1h ago
+            if pdate and (now - pdate) < self.ITEM_COOLDOWN_SEC:
+                remaining = int(self.ITEM_COOLDOWN_SEC - (now - pdate))
+                self._cooldowns[iid] = now + remaining
+                self._cooldown_tags[iid] = tag
+                # oldest item not ready → pause whole tag
+                if it is sorted_items[0]:
                     self._tag_pauses[tag] = now + remaining
-                    self._cooldowns[iid] = now + remaining
-                    self._cooldown_tags[iid] = tag
-                    mins_left = int(remaining / 60)
-                    broadcaster.emit(f"⏳ [{name}][{tag}] {lot_link} — кулдаун LOLZ, пауза тегу {mins_left}хв", "warn")
-                    break  # no point trying more items in this tag
+                    mins_left = remaining // 60
+                    broadcaster.emit(f"⏳ [{name}][{tag}] {lot_link} — ще {mins_left}хв кд, пауза тегу", "warn")
+                break
 
+            # in-memory cooldown (we bumped it this session)
+            if self._cooldowns.get(iid, 0) > now:
+                continue
+
+            # --- bump exactly 1 item ---
+            with _bump_api_sem:
+                if _api_limit_until > time.time() and not manual:
+                    return
+                time.sleep(0.3)
+                ok, reason = bump_item(token, iid)
+
+            if ok:
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
+                self._tag_bump_count += 1
+                broadcaster.emit(
+                    f"✅ [{name}][{tag}] {lot_link}  (тег {self._tag_bump_count}/{bumps_quota})", "ok"
+                )
+                record_bump(name, tag, iid, title, True, "")
+                self._auto_stick_after_bump(token, name, tag, iid, it)
+                # rotate to next tag after quota
+                if self._tag_bump_count >= bumps_quota:
+                    self._current_tag_idx = (self._current_tag_idx + 1) % num_tags
+                    self._tag_bump_count  = 0
+
+            elif reason.startswith("продано/видалено"):
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
+                record_bump(name, tag, iid, title, False, reason)
+                broadcaster.emit(f"🗑 [{name}][{tag}] {lot_link} — не знайдено", "warn")
+
+            elif reason.startswith("ліміт") or reason.startswith("заборонено"):
+                # daily bump limit exhausted → global pause all markets
+                record_bump(name, tag, iid, title, False, reason)
+                _api_limit_until = now + API_LIMIT_PAUSE_SEC
+                mins = API_LIMIT_PAUSE_SEC // 60
+                broadcaster.emit(f"🚫 [{name}] денний ліміт підняттів — пауза всіх ринків на {mins}хв", "warn")
+
+            elif reason.startswith("ratelimit"):
+                broadcaster.emit(f"⏱ [{name}][{tag}] rate limit LOLZ — пауза 30с", "warn")
+                time.sleep(30)
+
+            elif reason.startswith("кулдаун"):
+                if pdate and pdate > 0:
+                    remaining = max(60, self.ITEM_COOLDOWN_SEC - (now - pdate))
                 else:
-                    broadcaster.emit(f"⛔ [{name}][{tag}] {lot_link} — {reason}", "error")
-                    record_bump(name, tag, iid, title, False, reason)
-                    if any(reason.startswith(f"[{c}]") for c in ("500","502","503","504")):
-                        return  # server down, stop all tags
-                    self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
-                    self._cooldown_tags[iid] = tag
+                    remaining = self.ITEM_COOLDOWN_SEC
+                self._tag_pauses[tag] = now + remaining
+                self._cooldowns[iid]  = now + remaining
+                self._cooldown_tags[iid] = tag
+                mins_left = remaining // 60
+                broadcaster.emit(f"⏳ [{name}][{tag}] {lot_link} — кулдаун LOLZ, пауза тегу {mins_left}хв", "warn")
 
-            if bumped_count == 0 and api_tried > 0:
-                avail = sum(1 for it in sorted_items if self._cooldowns.get(str(it.get("item_id","")), 0) <= now)
-                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось підняти ({api_tried} спроб, {avail}/{len(sorted_items)} вільних)", "warn")
+            else:
+                broadcaster.emit(f"⛔ [{name}][{tag}] {lot_link} — {reason}", "error")
+                record_bump(name, tag, iid, title, False, reason)
+                if any(reason.startswith(f"[{c}]") for c in ("500","502","503","504")):
+                    return
+                self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
+                self._cooldown_tags[iid] = tag
+
+            break  # always exit after the first candidate — 1 bump per tick
 
     def _auto_stick_after_bump(self, token: str, name: str, tag: str, iid: str, it: dict):
         """After a successful bump, pin the bumped item and rotate oldest pinned out."""
