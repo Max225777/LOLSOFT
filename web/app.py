@@ -760,6 +760,66 @@ class MarketEngine:
             else:
                 broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {iid}: {err_s}", "warn")
 
+    def pin_cleanup_tick(self):
+        """Every 15 min: fetch real pinned state from API, unpin excess oldest-first."""
+        if not self.cfg.get("enabled", True):
+            return
+        token = self.get_token()
+        if not token:
+            return
+        name = self.cfg.get("name", "?")
+        cfg  = load_config()
+        tag_sticky = cfg.get("tag_sticky", {})
+        if not tag_sticky:
+            return
+
+        for tag, target in tag_sticky.items():
+            if target <= 0:
+                continue
+            tag_id = _tag_id_map.get(tag)
+            if not tag_id:
+                continue
+            try:
+                items = fetch_tag_items_sorted(token, tag_id)
+            except Exception as e:
+                broadcaster.emit(f"⚠ [{name}][{tag}] pin_cleanup fetch: {e}", "warn")
+                continue
+
+            pinned = [x for x in items if _is_pinned(x)]
+            excess = len(pinned) - target
+            if excess <= 0:
+                continue
+
+            # sort pinned oldest refreshed_date first → unpin those
+            to_unpin = sorted(
+                pinned,
+                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0
+            )[:excess]
+
+            with self._stick_lock:
+                for oldest in to_unpin:
+                    old_id = str(oldest.get("item_id", ""))
+                    title  = oldest.get("title") or oldest.get("title_en") or f"#{old_id}"
+                    ok_u, err_u = unstick_item(token, old_id)
+                    if ok_u:
+                        oldest["is_pinned"] = False
+                        oldest["is_sticky"] = False
+                        # update cache
+                        for cached_it in _tag_items_cache.get(tag.strip(), []):
+                            if str(cached_it.get("item_id", "")) == old_id:
+                                cached_it["is_pinned"] = False
+                                cached_it["is_sticky"] = False
+                                break
+                        broadcaster.emit(
+                            f"🧹 [{name}][{tag}] знято зайвий пін: {title[:40]} (було {len(pinned)}, ліміт {target})", "info"
+                        )
+                    elif "[403]" in err_u:
+                        self._unstick_blocked.add(old_id)
+                        broadcaster.emit(f"⚠ [{name}][{tag}] {old_id} заблоковано для зняття (403)", "warn")
+                    else:
+                        broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
+
+
 # ─── Scheduler manager ────────────────────────────────────────────────────────
 
 def _safe_job(fn):
@@ -819,6 +879,10 @@ class SchedulerManager:
                 self._sched.add_job(_safe_job(engine.bump_tick), "interval", seconds=bi,
                                     start_date=datetime.now(_KYIV_TZ) + timedelta(seconds=stagger),
                                     id=f"bump_{name}", replace_existing=True)
+                # pin cleanup every 15 min, staggered per market
+                self._sched.add_job(_safe_job(engine.pin_cleanup_tick), "interval", minutes=15,
+                                    start_date=datetime.now(_KYIV_TZ) + timedelta(minutes=15, seconds=stagger),
+                                    id=f"pinclean_{name}", replace_existing=True)
 
 
     def _warmup_cache(self):
