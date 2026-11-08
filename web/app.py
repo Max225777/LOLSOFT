@@ -151,6 +151,8 @@ def fetch_tag_items_sorted(token: str, tag_id: int) -> list[dict]:
             params={"show": "active", "order_by": "pdate_to_up",
                     "tag_id[]": tag_id, "page": page},
             headers=_headers(token), timeout=30)
+        if resp.status_code == 429:
+            raise requests.HTTPError("429 rate limit on item fetch")
         if resp.status_code != 200:
             break
         items = resp.json().get("items", [])
@@ -486,7 +488,8 @@ class MarketEngine:
             listings = fetch_listings(url, token, count)
             broadcaster.emit(f"🔄 [{name}] оновлено {len(listings)} лотів", "info")
         except Exception as e:
-            broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
+            if "429" not in str(e):
+                broadcaster.emit(f"⚠ [{name}] refresh: {e}", "warn")
 
     def bump_tick(self, manual: bool = False):
         # per-market lock: skip tick if this market is already running
@@ -594,7 +597,10 @@ class MarketEngine:
                     broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
                     return
             except Exception as e:
-                broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
+                if "429" in str(e):
+                    pass  # rate limit on search — skip top-N check, proceed to bump
+                else:
+                    broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
 
         # fetch items sorted oldest-bumped-first from LOLZ API
         try:
