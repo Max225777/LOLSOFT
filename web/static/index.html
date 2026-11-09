@@ -1198,22 +1198,32 @@ async function spiderLoadBalance() {
   if (!el) return;
   try {
     const d = await fetch('/api/spider/balance').then(r => r.json());
-    const bal = d.balance ?? d.Balance ?? d.data?.balance ?? JSON.stringify(d);
-    el.textContent = `баланс: ${bal}`;
+    const bal = d?.result?.wallet ?? d?.result?.balance ?? d.balance ?? d.Balance ?? d.data?.balance;
+    const cur = d?.result?.currency ?? 'USD';
+    el.textContent = bal != null ? `баланс: ${parseFloat(bal).toFixed(2)} ${cur}` : `баланс: ${JSON.stringify(d)}`;
   } catch(e) { el.textContent = `помилка: ${e.message}`; }
 }
 
 async function spiderLoadCountries() {
   try {
-    const list = await fetch('/api/spider/countries').then(r => r.json());
-    _buyerCountries = Array.isArray(list) ? list : [];
+    const raw = await fetch('/api/spider/countries').then(r => r.json());
+    // Spider API может вернуть массив или объект с result/data
+    let list = raw;
+    if (!Array.isArray(raw)) {
+      list = raw?.result ?? raw?.data ?? raw?.countrys ?? raw?.countries ?? [];
+    }
+    if (!Array.isArray(list) || !list.length) {
+      alert('Список країн порожній або незнайомий формат:\n' + JSON.stringify(raw).slice(0, 300));
+      return;
+    }
+    _buyerCountries = list;
     const sel = document.getElementById('buyer-country-sel');
     if (!sel) return;
-    sel.style.display = _buyerCountries.length ? 'block' : 'none';
+    sel.style.display = 'block';
     sel.innerHTML = _buyerCountries.map(c => {
-      const code = c.code || c.country || c;
-      const name = c.name || c.title || code;
-      return `<option value="${code}">${code} — ${name}</option>`;
+      const code = typeof c === 'string' ? c : (c.code || c.country || c.iso || c.name || JSON.stringify(c));
+      const name = typeof c === 'string' ? c : (c.name || c.title || c.country_name || code);
+      return `<option value="${code}">${code}${name !== code ? ' — ' + name : ''}</option>`;
     }).join('');
   } catch(e) { alert('Помилка завантаження країн: ' + e.message); }
 }

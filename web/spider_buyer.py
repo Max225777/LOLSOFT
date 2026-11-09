@@ -52,7 +52,13 @@ def spider_countries() -> list:
     data = _spider("getCountrys")
     if isinstance(data, list):
         return data
-    return data.get("countrys") or data.get("countries") or data.get("data") or []
+    # try common wrapper keys
+    for key in ("result", "data", "countrys", "countries"):
+        val = data.get(key)
+        if val and isinstance(val, (list, dict)):
+            return val if isinstance(val, list) else list(val.values())
+    # return raw so frontend can inspect
+    return [data]
 
 
 def _load_accounts():
