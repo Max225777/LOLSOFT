@@ -1152,7 +1152,7 @@ async function renderBuyerOverlay(body) {
           <div style="display:flex;flex-direction:column;gap:4px">
             <label style="font-size:10px;color:var(--sub)">Країна (ISO)</label>
             <div style="display:flex;gap:4px">
-              <input id="buyer-country" type="text" placeholder="UA" maxlength="6"
+              <input id="buyer-country" type="text" placeholder="UA" maxlength="6" autocomplete="off"
                 style="width:70px;padding:4px 7px;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--text)">
               <button class="btn-s" onclick="spiderLoadCountries()" style="font-size:11px;padding:3px 8px" title="Завантажити список країн">🌍</button>
             </div>
@@ -1205,15 +1205,20 @@ async function spiderLoadBalance() {
 }
 
 async function spiderLoadCountries() {
+  const btn = document.querySelector('[onclick="spiderLoadCountries()"]');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   try {
-    const raw = await fetch('/api/spider/countries').then(r => r.json());
-    // Spider API может вернуть массив или объект с result/data
-    let list = raw;
-    if (!Array.isArray(raw)) {
-      list = raw?.result ?? raw?.data ?? raw?.countrys ?? raw?.countries ?? [];
+    const r = await fetch('/api/spider/countries');
+    const raw = await r.json();
+    console.log('[buyer] /api/spider/countries raw:', raw);
+    if (!r.ok) {
+      alert('Помилка API: ' + (raw?.detail || r.status));
+      return;
     }
+    // Backend returns array directly from spider_buyer.spider_countries()
+    let list = Array.isArray(raw) ? raw : (raw?.result ?? raw?.data ?? raw?.countrys ?? raw?.countries ?? []);
     if (!Array.isArray(list) || !list.length) {
-      alert('Список країн порожній або незнайомий формат:\n' + JSON.stringify(raw).slice(0, 300));
+      alert('Список країн порожній:\n' + JSON.stringify(raw).slice(0, 300));
       return;
     }
     _buyerCountries = list;
@@ -1228,6 +1233,7 @@ async function spiderLoadCountries() {
       return `<option value="${code}">${code}${info ? ' — ' + info : ''}</option>`;
     }).join('');
   } catch(e) { alert('Помилка завантаження країн: ' + e.message); }
+  finally { if (btn) { btn.textContent = '🌍'; btn.disabled = false; } }
 }
 
 async function spiderCreateOrder() {
