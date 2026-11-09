@@ -182,6 +182,7 @@ tr:hover td{background:#1e1e1e}
       <button class="btn-s" onclick="openOverlay('markets')" style="padding:4px 12px;font-size:12px;font-weight:600;color:var(--text)">🏪 Ринки</button>
       <button class="btn-s" onclick="openOverlay('schedule')" style="padding:4px 12px;font-size:12px;font-weight:600;color:var(--text)">🕐 Розклад</button>
       <button class="btn-s" onclick="openOverlay('settings')" style="padding:4px 12px;font-size:12px;font-weight:600;color:var(--text)">⚙ Налаштування</button>
+      <button class="btn-s" onclick="openOverlay('buyer')" style="padding:4px 12px;font-size:12px;font-weight:600;color:#f0a500">🛒 Закупка</button>
     </div>
     <div id="left-panel-body">
       <div style="display:flex;align-items:center;gap:0;margin-bottom:4px">
@@ -546,11 +547,11 @@ function _dropToCell(toCell) {
   renderTagChips();
 }
 
-// ── overlay (Markets / Schedule / Settings) ───────────────────────────────────
+// ── overlay (Markets / Schedule / Settings / Buyer) ──────────────────────────
 function openOverlay(section) {
   const overlay = document.getElementById('overlay');
   overlay.classList.add('show');
-  const titles = {markets:'🏪 Ринки', schedule:'🕐 Розклад', settings:'⚙ Налаштування'};
+  const titles = {markets:'🏪 Ринки', schedule:'🕐 Розклад', settings:'⚙ Налаштування', buyer:'🛒 Закупка акаунтів'};
   document.getElementById('overlay-title').textContent = titles[section] || section;
   const body = document.getElementById('overlay-body');
   body.innerHTML = '<div style="color:var(--sub);padding:20px">Завантаження…</div>';
@@ -558,6 +559,7 @@ function openOverlay(section) {
   if (section === 'markets')  renderMarketsOverlay(body);
   if (section === 'schedule') renderScheduleOverlay(body);
   if (section === 'settings') renderSettingsOverlay(body);
+  if (section === 'buyer')    renderBuyerOverlay(body);
 }
 
 function closeOverlay() {
@@ -1127,6 +1129,202 @@ async function loadServerStatus() {
   setInterval(loadTagStats,      10000);
   setInterval(loadServerStatus,   5000);
 })();
+
+// ── Buyer overlay ─────────────────────────────────────────────────────────────
+let _buyerCountries = [];
+let _buyerRefreshTimer = null;
+
+async function renderBuyerOverlay(body) {
+  body.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px;max-width:900px;margin:0 auto">
+
+      <!-- Balance -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:var(--accent)">Spider-service</span>
+        <span id="spider-balance" style="font-size:12px;color:var(--sub)">— баланс: …</span>
+        <button class="btn-s" onclick="spiderLoadBalance()" style="font-size:11px;padding:2px 8px">🔄 Баланс</button>
+      </div>
+
+      <!-- New order form -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:700">Новий замовлення</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:10px;color:var(--sub)">Країна (ISO)</label>
+            <div style="display:flex;gap:4px">
+              <input id="buyer-country" type="text" placeholder="UA" maxlength="6"
+                style="width:70px;padding:4px 7px;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--text)">
+              <button class="btn-s" onclick="spiderLoadCountries()" style="font-size:11px;padding:3px 8px" title="Завантажити список країн">🌍</button>
+            </div>
+            <select id="buyer-country-sel" size="1" onchange="document.getElementById('buyer-country').value=this.value"
+              style="font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--sub);max-width:200px;display:none">
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:10px;color:var(--sub)">Кількість</label>
+            <input id="buyer-qty" type="number" value="1" min="1" max="500"
+              style="width:70px;padding:4px 7px;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;color:var(--text)">
+          </div>
+          <button class="btn btn-p" onclick="spiderCreateOrder()" style="padding:5px 16px;font-size:12px">🛒 Купити</button>
+        </div>
+      </div>
+
+      <!-- Active orders -->
+      <div id="buyer-orders-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
+
+      <!-- Accounts table -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+          <span style="font-size:13px;font-weight:700">Готові акаунти</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn-s" onclick="spiderCopyAll()" style="font-size:11px;padding:3px 10px">📋 Копіювати все (HEX:DC)</button>
+            <button class="btn-s" onclick="spiderRefreshAccounts()" style="font-size:11px;padding:3px 8px">🔄</button>
+          </div>
+        </div>
+        <div id="buyer-accounts-wrap">
+          <div style="color:var(--sub);font-size:12px">Завантаження…</div>
+        </div>
+      </div>
+    </div>`;
+
+  spiderLoadBalance();
+  await spiderRefreshAll();
+  if (_buyerRefreshTimer) clearInterval(_buyerRefreshTimer);
+  _buyerRefreshTimer = setInterval(spiderRefreshAll, 3000);
+}
+
+async function spiderLoadBalance() {
+  const el = document.getElementById('spider-balance');
+  if (!el) return;
+  try {
+    const d = await fetch('/api/spider/balance').then(r => r.json());
+    const bal = d.balance ?? d.Balance ?? d.data?.balance ?? JSON.stringify(d);
+    el.textContent = `баланс: ${bal}`;
+  } catch(e) { el.textContent = `помилка: ${e.message}`; }
+}
+
+async function spiderLoadCountries() {
+  try {
+    const list = await fetch('/api/spider/countries').then(r => r.json());
+    _buyerCountries = Array.isArray(list) ? list : [];
+    const sel = document.getElementById('buyer-country-sel');
+    if (!sel) return;
+    sel.style.display = _buyerCountries.length ? 'block' : 'none';
+    sel.innerHTML = _buyerCountries.map(c => {
+      const code = c.code || c.country || c;
+      const name = c.name || c.title || code;
+      return `<option value="${code}">${code} — ${name}</option>`;
+    }).join('');
+  } catch(e) { alert('Помилка завантаження країн: ' + e.message); }
+}
+
+async function spiderCreateOrder() {
+  const country = (document.getElementById('buyer-country')?.value || '').trim().toUpperCase();
+  const qty = parseInt(document.getElementById('buyer-qty')?.value || '1');
+  if (!country) { alert('Вкажіть країну'); return; }
+  if (!qty || qty < 1) { alert('Вкажіть кількість'); return; }
+  try {
+    await fetch('/api/spider/order', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({country, qty})});
+    await spiderRefreshAll();
+  } catch(e) { alert('Помилка: ' + e.message); }
+}
+
+async function spiderCancelOrder(id) {
+  await fetch(`/api/spider/order/${id}`, {method:'DELETE'});
+  await spiderRefreshAll();
+}
+
+async function spiderDeleteAccount(idx) {
+  await fetch(`/api/spider/account/${idx}`, {method:'DELETE'});
+  await spiderRefreshAccounts();
+}
+
+async function spiderCopyAll() {
+  try {
+    const accs = await fetch('/api/spider/accounts').then(r => r.json());
+    if (!accs.length) { alert('Немає акаунтів'); return; }
+    const text = accs.map(a => `${a.auth_key_hex}:${a.dc_id}`).join('\n');
+    await navigator.clipboard.writeText(text);
+    alert(`Скопійовано ${accs.length} акаунтів`);
+  } catch(e) { alert('Помилка копіювання: ' + e.message); }
+}
+
+async function spiderRefreshAccounts() {
+  const wrap = document.getElementById('buyer-accounts-wrap');
+  if (!wrap) return;
+  try {
+    const accs = await fetch('/api/spider/accounts').then(r => r.json());
+    if (!accs.length) {
+      wrap.innerHTML = '<div style="color:var(--sub);font-size:12px;padding:4px 0">Поки порожньо</div>';
+      return;
+    }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="color:var(--sub);font-size:10px">
+            <th style="padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)">#</th>
+            <th style="padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)">Країна</th>
+            <th style="padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)">Телефон</th>
+            <th style="padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)">DC</th>
+            <th style="padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)">Auth Key HEX</th>
+            <th style="padding:4px 6px;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${accs.map((a, i) => `
+            <tr style="border-bottom:1px solid #111">
+              <td style="padding:4px 6px;color:var(--sub)">${i+1}</td>
+              <td style="padding:4px 6px;font-weight:600">${a.country || '?'}</td>
+              <td style="padding:4px 6px">${a.phone || '?'}</td>
+              <td style="padding:4px 6px;color:var(--accent)">${a.dc_id}</td>
+              <td style="padding:4px 6px;font-family:monospace;color:var(--sub);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.auth_key_hex}">${a.auth_key_hex.slice(0,24)}…</td>
+              <td style="padding:4px 6px;text-align:right;white-space:nowrap">
+                <button class="btn-s" onclick="navigator.clipboard.writeText('${a.auth_key_hex}:${a.dc_id}')" style="font-size:10px;padding:2px 6px" title="Копіювати HEX:DC">📋</button>
+                <button class="btn-s btn-d" onclick="spiderDeleteAccount(${i})" style="font-size:10px;padding:2px 6px">✕</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:var(--warn);font-size:12px">Помилка: ${e.message}</div>`;
+  }
+}
+
+async function spiderRefreshAll() {
+  const wrap = document.getElementById('buyer-orders-wrap');
+  if (!wrap) return;
+  try {
+    const orders = await fetch('/api/spider/orders').then(r => r.json());
+    const active = orders.filter(o => o.status !== 'done');
+    if (!active.length) {
+      wrap.innerHTML = '';
+    } else {
+      wrap.innerHTML = active.map(o => {
+        const pct = o.qty > 0 ? Math.round((o.done / o.qty) * 100) : 0;
+        const statusColor = o.status === 'running' ? 'var(--accent)' : o.status === 'cancelled' ? 'var(--warn)' : 'var(--sub)';
+        return `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:700">${o.country} — ${o.done}/${o.qty} акаунтів</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:11px;color:${statusColor}">${o.status}</span>
+                ${o.status !== 'cancelled' ? `<button class="btn-s btn-d" onclick="spiderCancelOrder('${o.id}')" style="font-size:10px;padding:2px 7px">✕ Скасувати</button>` : ''}
+              </div>
+            </div>
+            <div style="height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px;transition:width .4s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--sub)">
+              <span>${pct}%</span>
+              <span>помилок: ${o.failed}</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  } catch(e) {}
+  await spiderRefreshAccounts();
+}
 </script>
 </body>
 </html>

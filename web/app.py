@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import spider_buyer
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
@@ -933,6 +934,7 @@ class SchedulerManager:
             broadcaster.emit(f"⚠ Кеш: {e}", "warn")
 
 sched_mgr = SchedulerManager()
+spider_buyer.set_broadcaster(broadcaster)
 
 # ─── FastAPI app ──────────────────────────────────────────────────────────────
 
@@ -1297,6 +1299,51 @@ def download_zip():
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=lolsoft_web.zip"}
     )
+
+# ─── Spider Buyer API ────────────────────────────────────────────────────────
+
+@app.get("/api/spider/balance")
+def spider_balance():
+    try:
+        return spider_buyer.spider_balance()
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/spider/countries")
+def spider_countries():
+    try:
+        return spider_buyer.spider_countries()
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+class OrderIn(BaseModel):
+    country: str
+    qty: int
+
+@app.post("/api/spider/order")
+def spider_create_order(body: OrderIn):
+    try:
+        return spider_buyer.create_order(body.country, body.qty)
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/spider/orders")
+def spider_get_orders():
+    return spider_buyer.get_orders()
+
+@app.get("/api/spider/accounts")
+def spider_get_accounts():
+    return spider_buyer.get_accounts()
+
+@app.delete("/api/spider/account/{idx}")
+def spider_delete_account(idx: int):
+    spider_buyer.delete_account(idx)
+    return {"ok": True}
+
+@app.delete("/api/spider/order/{order_id}")
+def spider_cancel_order(order_id: str):
+    spider_buyer.cancel_order(order_id)
+    return {"ok": True}
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
 
