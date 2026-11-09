@@ -50,15 +50,24 @@ def spider_balance() -> dict:
 
 def spider_countries() -> list:
     data = _spider("getCountrys")
+    # Format: {"1": {"UZ": 15, "KG": 50, ...}, "2": {...}}
+    # Keys are server IDs, values are {ISO: count} dicts
+    if isinstance(data, dict):
+        merged: dict[str, dict] = {}
+        for server_id, codes in data.items():
+            if not isinstance(codes, dict):
+                continue
+            for iso, cnt in codes.items():
+                if iso not in merged:
+                    merged[iso] = {"code": iso, "count": 0, "server": str(server_id)}
+                try:
+                    merged[iso]["count"] += int(cnt)
+                except (TypeError, ValueError):
+                    pass
+        return sorted(merged.values(), key=lambda x: x["code"])
     if isinstance(data, list):
         return data
-    # try common wrapper keys
-    for key in ("result", "data", "countrys", "countries"):
-        val = data.get(key)
-        if val and isinstance(val, (list, dict)):
-            return val if isinstance(val, list) else list(val.values())
-    # return raw so frontend can inspect
-    return [data]
+    return []
 
 
 def _load_accounts():

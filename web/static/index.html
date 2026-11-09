@@ -1221,9 +1221,9 @@ async function spiderLoadCountries() {
     if (!sel) return;
     sel.style.display = 'block';
     sel.innerHTML = _buyerCountries.map(c => {
-      const code = typeof c === 'string' ? c : (c.code || c.country || c.iso || c.name || JSON.stringify(c));
-      const name = typeof c === 'string' ? c : (c.name || c.title || c.country_name || code);
-      return `<option value="${code}">${code}${name !== code ? ' — ' + name : ''}</option>`;
+      const code = typeof c === 'string' ? c : (c.code || c.iso || c.country || '?');
+      const count = c.count != null ? ` (${c.count})` : '';
+      return `<option value="${code}">${code}${count}</option>`;
     }).join('');
   } catch(e) { alert('Помилка завантаження країн: ' + e.message); }
 }
