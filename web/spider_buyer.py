@@ -57,11 +57,17 @@ def spider_countries() -> list:
         for server_id, codes in data.items():
             if not isinstance(codes, dict):
                 continue
-            for iso, cnt in codes.items():
+            for iso, val in codes.items():
                 if iso not in merged:
-                    merged[iso] = {"code": iso, "count": 0, "server": str(server_id)}
+                    merged[iso] = {"code": iso, "count": None, "price": None, "server": str(server_id)}
                 try:
-                    merged[iso]["count"] += int(cnt)
+                    f = float(val)
+                    # heuristic: if integer-like and >= 1 with no decimal → count
+                    # if has decimal part → price
+                    if f == int(f) and f >= 1:
+                        merged[iso]["count"] = (merged[iso]["count"] or 0) + int(f)
+                    else:
+                        merged[iso]["price"] = round(f, 4)
                 except (TypeError, ValueError):
                     pass
         return sorted(merged.values(), key=lambda x: x["code"])
