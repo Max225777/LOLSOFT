@@ -289,10 +289,31 @@ async function loadDayStats(date='today') {
     if (!el) return;
     const tile = (val, lbl, color) =>
       `<div class="stat-tile"><div class="stat-val" style="color:${color}">${val}</div><div class="stat-lbl">${lbl}</div></div>`;
+    // per-market rows with progress bar
+    const mkts = (s.by_market || []).sort((a,b) => (b.ok||0)-(a.ok||0));
+    const mktHtml = mkts.length ? `
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+        ${mkts.map(m => {
+          const done = (m.ok||0);
+          const max  = (m.max_bumps_per_day||0);
+          const pct  = max > 0 ? Math.min(100, Math.round(done/max*100)) : null;
+          const barColor = pct === null ? 'var(--accent)' : pct >= 90 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+          const label = max > 0 ? `${done} / ${max}` : `${done}`;
+          const pctLabel = pct !== null ? `<span style="color:${barColor};font-size:10px;margin-left:4px">${pct}%</span>` : '';
+          const bar = max > 0 ? `<div style="margin-top:3px;height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width .3s"></div></div>` : '';
+          return `<div style="background:var(--bg2);border-radius:6px;padding:6px 10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:12px;font-weight:600">${x(m.name)}</span>
+              <span style="font-size:12px;color:var(--green)">${label}${pctLabel}</span>
+            </div>${bar}
+          </div>`;
+        }).join('')}
+      </div>` : '';
     el.innerHTML =
       tile(s.total, 'Спроб', 'var(--text)') +
       tile(s.ok, '✅ Вдало', 'var(--green)') +
-      tile(s.fail, '⛔ Невдало', 'var(--red)');
+      tile(s.fail, '⛔ Невдало', 'var(--red)') +
+      mktHtml;
   } catch(e) {}
 }
 
@@ -655,6 +676,7 @@ function buildMktCard(m, idx) {
       <label>Топ-N:</label><input type="number" class="mkt-topn" value="${m.top_n||1}" min="1" max="20"/>
       <label>Оновл. (с):</label><input type="number" class="mkt-ri" value="${m.refresh_interval||60}" min="30" max="3600"/>
       <label>Підн. (с):</label><input type="number" class="mkt-bi" value="${m.bump_interval||60}" min="30" max="3600"/>
+      <label>Макс./день:</label><input type="number" class="mkt-maxday" value="${m.max_bumps_per_day||0}" min="0" max="9999" title="Максимум підняттів на день (0 = без ліміту)"/>
     </div>
     <div class="row" style="margin-top:8px">
       <label>🕐 Робочі години:</label>
@@ -727,6 +749,7 @@ function collectMarkets() {
     top_n:            +card.querySelector('.mkt-topn').value||1,
     refresh_interval: +card.querySelector('.mkt-ri').value||60,
     bump_interval:    +card.querySelector('.mkt-bi').value||60,
+    max_bumps_per_day: +card.querySelector('.mkt-maxday')?.value||0,
     work_from:        card.querySelector('.mkt-from').value,
     work_to:          card.querySelector('.mkt-to').value,
     ignore_hours:     card.querySelector('.mkt-ignore-hours')?.checked || false,

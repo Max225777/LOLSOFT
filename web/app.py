@@ -310,6 +310,7 @@ def default_market(name="Новий ринок") -> dict:
         "count": 10, "top_n": 1,
         "refresh_interval": 60, "bump_interval": 60,
         "enabled": True, "work_from": "", "work_to": "",
+        "max_bumps_per_day": 0,
     }
 
 # ─── WebSocket log broadcaster ────────────────────────────────────────────────
@@ -1118,12 +1119,17 @@ def day_stats(date: str = "today"):
             by_market[name]["ok"] += 1
         else:
             by_market[name]["fail"] += 1
+    # attach max_bumps_per_day from config
+    cfg = load_config()
+    max_map = {m.get("name", ""): m.get("max_bumps_per_day", 0)
+               for m in cfg.get("markets", [])}
     return {
         "total": total,
         "ok": ok,
         "fail": total - ok,
         "limit_fails": limit_fails,
-        "by_market": [{"name": k, **v} for k, v in by_market.items()],
+        "by_market": [{"name": k, **v, "max_bumps_per_day": max_map.get(k, 0)}
+                      for k, v in by_market.items()],
     }
 
 @app.get("/api/market-status")
