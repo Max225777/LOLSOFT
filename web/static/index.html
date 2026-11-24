@@ -289,37 +289,19 @@ async function loadDayStats(date='today') {
     if (!el) return;
     const tile = (val, lbl, color) =>
       `<div class="stat-tile"><div class="stat-val" style="color:${color}">${val}</div><div class="stat-lbl">${lbl}</div></div>`;
-    // per-market rows with progress bar
-    const mkts = (s.by_market || []).sort((a,b) => (b.ok||0)-(a.ok||0));
-    const mktHtml = mkts.length ? `
-      <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-        ${mkts.map(m => {
-          const done = (m.ok||0);
-          const max  = (m.max_bumps_per_day||0);
-          const pct  = max > 0 ? Math.min(100, Math.round(done/max*100)) : null;
-          const barColor = pct === null ? 'var(--accent)' : pct >= 90 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
-          const label = max > 0 ? `${done} / ${max}` : `${done}`;
-          const pctLabel = pct !== null ? `<span style="color:${barColor};font-size:10px;margin-left:4px">${pct}%</span>` : '';
-          const bar = max > 0 ? `<div style="margin-top:3px;height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width .3s"></div></div>` : '';
-          return `<div style="background:var(--bg2);border-radius:6px;padding:6px 10px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:12px;font-weight:600">${x(m.name)}</span>
-              <span style="font-size:12px;color:var(--green)">${label}${pctLabel}</span>
-            </div>${bar}
-          </div>`;
-        }).join('')}
-      </div>` : '';
+    // store per-market data for status cards
+    _dayStatsByMarket = {};
+    (s.by_market || []).forEach(m => { _dayStatsByMarket[m.name] = m; });
     el.innerHTML =
       tile(s.total, 'Спроб', 'var(--text)') +
       tile(s.ok, '✅ Вдало', 'var(--green)') +
-      tile(s.fail, '⛔ Невдало', 'var(--red)') +
-      mktHtml;
+      tile(s.fail, '⛔ Невдало', 'var(--red)');
   } catch(e) {}
 }
 
 // ── market status (left panel) ────────────────────────────────────────────────
 async function loadMarketStatus() {
-  loadDayStats();
+  await loadDayStats();
   try {
     const markets = await api('/api/market-status');
     const c = document.getElementById('status-list');
@@ -359,9 +341,20 @@ function buildStatusCard(m) {
     rows = '<tr><td colspan="5" style="color:var(--sub);text-align:center;padding:8px">Немає даних</td></tr>';
   }
 
+  const ds = _dayStatsByMarket[m.name];
+  let bumpInfo = '';
+  if (ds) {
+    const done = ds.ok || 0;
+    const max  = ds.max_bumps_per_day || 0;
+    const pct  = max > 0 ? Math.min(100, Math.round(done / max * 100)) : null;
+    const col  = pct === null ? 'var(--green)' : pct >= 90 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+    const lbl  = max > 0 ? `${done}/${max} (${pct}%)` : `${done} підн.`;
+    bumpInfo = `<span style="font-size:10px;color:${col};margin-left:6px">${lbl}</span>`;
+  }
+
   div.innerHTML = `
     <div class="mkt-head-row">
-      <span class="mkt-title">${x(m.name)}</span>
+      <span class="mkt-title">${x(m.name)}</span>${bumpInfo}
       <span style="color:${statusColor};font-size:13px">${statusText}</span>
       <span style="font-size:10px;color:var(--sub)">${hours}</span>
       <div class="spacer"></div>
@@ -1154,6 +1147,7 @@ async function loadServerStatus() {
 })();
 
 // ── Buyer overlay ─────────────────────────────────────────────────────────────
+let _dayStatsByMarket = {};
 let _buyerCountries = [];
 let _buyerRefreshTimer = null;
 
