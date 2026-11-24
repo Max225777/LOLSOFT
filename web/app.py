@@ -709,6 +709,8 @@ class MarketEngine:
             self._auto_stick_locked(token, name, tag, iid, it, target)
 
     def _auto_stick_locked(self, token: str, name: str, tag: str, iid: str, it: dict, target: int):
+        if _api_limit_until > time.time():
+            return  # global pause active — skip pin ops
         # read live cache state (not a copy) so parallel bumps see each other's pins
         tag_items = _tag_items_cache.get(tag.strip(), [])
         pinned = [x for x in tag_items if _is_pinned(x)]
@@ -898,8 +900,8 @@ class SchedulerManager:
                 self._sched.add_job(_safe_job(engine.bump_tick), "interval", seconds=bi,
                                     start_date=datetime.now(_KYIV_TZ) + timedelta(seconds=stagger),
                                     id=f"bump_{name}", replace_existing=True)
-                # pin cleanup every 15 min; stagger by 60s per market so they don't pile up
-                pin_stagger = idx * 60
+                # pin cleanup every 15 min; stagger by 30s per market so they don't pile up
+                pin_stagger = idx * 30
                 self._sched.add_job(_safe_job(engine.pin_cleanup_tick), "interval", minutes=15,
                                     start_date=datetime.now(_KYIV_TZ) + timedelta(minutes=15, seconds=pin_stagger),
                                     id=f"pinclean_{name}", replace_existing=True)
