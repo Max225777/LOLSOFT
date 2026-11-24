@@ -770,8 +770,11 @@ class MarketEngine:
 
     def pin_cleanup_tick(self):
         """Every 15 min: fetch real pinned state from API, unpin excess oldest-first."""
+        global _api_limit_until
         if not self.cfg.get("enabled", True):
             return
+        if _api_limit_until > time.time():
+            return  # global pause active — skip silently
         token = self.get_token()
         if not token:
             return
@@ -787,9 +790,17 @@ class MarketEngine:
             tag_id = _tag_id_map.get(tag)
             if not tag_id:
                 continue
+            if _api_limit_until > time.time():
+                return  # pause set mid-loop — abort
             try:
                 items = fetch_tag_items_sorted(token, tag_id)
             except Exception as e:
+                if "429" in str(e):
+                    _api_limit_until = time.time() + API_LIMIT_PAUSE_SEC
+                    broadcaster.emit(
+                        f"⚠ [{name}][{tag}] pin_cleanup 429 — пауза всіх ринків {API_LIMIT_PAUSE_SEC//60}хв", "warn"
+                    )
+                    return
                 broadcaster.emit(f"⚠ [{name}][{tag}] pin_cleanup fetch: {e}", "warn")
                 continue
 
@@ -887,9 +898,10 @@ class SchedulerManager:
                 self._sched.add_job(_safe_job(engine.bump_tick), "interval", seconds=bi,
                                     start_date=datetime.now(_KYIV_TZ) + timedelta(seconds=stagger),
                                     id=f"bump_{name}", replace_existing=True)
-                # pin cleanup every 15 min, staggered per market
+                # pin cleanup every 15 min; stagger by 60s per market so they don't pile up
+                pin_stagger = idx * 60
                 self._sched.add_job(_safe_job(engine.pin_cleanup_tick), "interval", minutes=15,
-                                    start_date=datetime.now(_KYIV_TZ) + timedelta(minutes=15, seconds=stagger),
+                                    start_date=datetime.now(_KYIV_TZ) + timedelta(minutes=15, seconds=pin_stagger),
                                     id=f"pinclean_{name}", replace_existing=True)
 
 
