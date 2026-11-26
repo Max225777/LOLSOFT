@@ -222,6 +222,30 @@ def unstick_item(token: str, item_id: str) -> tuple[bool, str]:
 def _is_pinned(it: dict) -> bool:
     return bool(it.get("is_sticky") or it.get("sticky") or it.get("is_pinned"))
 
+def _bump_ts(it: dict) -> float:
+    return it.get("refreshed_date") or it.get("bumped_at") or it.get("up_timestamp") or 0
+
+def _update_cached_item(tag: str, item_id: str, **fields) -> bool:
+    for c in _tag_items_cache.get(tag.strip(), []):
+        if str(c.get("item_id", "")) == item_id:
+            c.update(fields)
+            return True
+    return False
+
+def _set_cached_pin(tag: str, item_id: str, pinned: bool, item: dict | None = None):
+    pin = {"is_sticky": pinned, "is_pinned": pinned, "sticky": pinned}
+    if not _update_cached_item(tag, item_id, **pin) and item is not None and tag.strip() in _tag_items_cache:
+        _tag_items_cache[tag.strip()].append({**item, **pin})
+
+def _sync_pins_to_cache(tag: str, fresh_items: list[dict]):
+    """Copy live pin state + bump time of freshly fetched lots into the shared cache."""
+    for it in fresh_items:
+        iid = str(it.get("item_id", ""))
+        _set_cached_pin(tag, iid, _is_pinned(it), it)
+        ts = _bump_ts(it)
+        if ts:
+            _update_cached_item(tag, iid, refreshed_date=ts)
+
 # Global API limit pause: when LOLZ returns "ліміт", all markets pause until this time
 _api_limit_until: float = 0.0
 API_LIMIT_PAUSE_SEC = 120  # 2 minutes
@@ -386,6 +410,7 @@ class MarketEngine:
 
     ITEM_COOLDOWN_SEC = 3600  # 1 hour cooldown after failed bump
     EMPTY_TAG_PAUSE_SEC = 600  # tag with no lots: re-check in 10 min
+    PIN_BLOCK_SEC = 3600       # lot LOLZ refused to (un)pin: retry after 1h
 
     def __init__(self, cfg: dict, token_fn):
         self.cfg          = cfg
@@ -393,9 +418,8 @@ class MarketEngine:
         self._cooldowns:     dict[str, float] = {}   # item_id → expires_at
         self._cooldown_tags: dict[str, str]   = {}   # item_id → tag_name
         self._tag_pauses:    dict[str, float] = {}   # tag_name → pause_until (whole-tag cooldown)
-        self._unstick_blocked: set[str] = set()  # item_ids that returned 403 on unstick
-        self._stick_blocked:   set[str] = set()  # item_ids that returned 403 on stick
-        self._pinned_this_tick: dict[str, set] = {}  # tag → set of iids pinned in current tick
+        self._unstick_blocked: dict[str, float] = {}  # item_id → until; LOLZ refused unstick (403)
+        self._stick_blocked:   dict[str, float] = {}  # item_id → until; LOLZ refused stick (403)
         self._stick_lock = threading.Lock()      # serialize stick/unstick operations per market
         self._bump_lock = threading.Lock()       # prevent concurrent bump_tick runs
         self._manual_lock = threading.Lock()     # prevent duplicate manual bumps
@@ -654,6 +678,8 @@ class MarketEngine:
                     f"✅ [{name}][{tag}] {lot_link}  (тег {self._tag_bump_count}/{bumps_quota})", "ok"
                 )
                 record_bump(name, tag, iid, title, True, "")
+                it["refreshed_date"] = int(time.time())
+                _update_cached_item(tag, iid, refreshed_date=it["refreshed_date"])
                 self._auto_stick_after_bump(token, name, tag, iid, it)
                 # rotate to next tag after quota
                 if self._tag_bump_count >= bumps_quota:
@@ -716,66 +742,53 @@ class MarketEngine:
             self._auto_stick_locked(token, name, tag, iid, it, target)
 
     def _auto_stick_locked(self, token: str, name: str, tag: str, iid: str, it: dict, target: int):
-        if _api_limit_until > time.time():
-            return  # global pause active — skip pin ops
-        # read live cache state (not a copy) so parallel bumps see each other's pins
-        tag_items = _tag_items_cache.get(tag.strip(), [])
-        pinned = [x for x in tag_items if _is_pinned(x)]
-        already_pinned = any(str(x.get("item_id", "")) == iid for x in pinned)
+        now = time.time()
+        if _api_limit_until > now or self._stick_blocked.get(iid, 0) > now:
+            return
+        pinned = [x for x in _tag_items_cache.get(tag.strip(), []) if _is_pinned(x)]
+        if any(str(x.get("item_id", "")) == iid for x in pinned):
+            return
 
-        # how many slots to free up:
-        # if not already pinned → need 1 free slot; if already pinned → no new slot needed
-        free_needed = 0 if already_pinned else 1
-        # also free any excess over target (e.g. target was lowered)
-        excess = len(pinned) - target
-        to_unpin_count = max(free_needed + excess, 0) if not already_pinned else max(excess, 0)
+        # free a slot first; never pin over the limit if the old pin couldn't be removed
+        need = len(pinned) + 1 - target
+        if need > 0 and self._unpin_oldest(token, name, tag, pinned, need, "📌", "знято старий") < need:
+            broadcaster.emit(
+                f"⚠ [{name}][{tag}] старий пін не знято ({len(pinned)}/{target}) — новий не закріплюю", "warn")
+            return
 
-        def _set_pin_in_cache(item_id: str, pinned_val: bool):
-            """Update is_pinned in _tag_items_cache by item_id (fetch returns new objects)."""
-            for cached_it in _tag_items_cache.get(tag.strip(), []):
-                if str(cached_it.get("item_id", "")) == item_id:
-                    cached_it["is_pinned"] = pinned_val
-                    cached_it["is_sticky"] = pinned_val
-                    break
+        title = it.get("title") or it.get("title_en") or f"#{iid}"
+        ok_s, err_s = stick_item(token, iid)
+        if ok_s:
+            _set_cached_pin(tag, iid, True, it)
+            broadcaster.emit(f"📌 [{name}][{tag}] закріплено: {title[:40]}", "ok")
+        else:
+            if "[403]" in err_s:
+                self._stick_blocked[iid] = now + self.PIN_BLOCK_SEC
+            broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {title[:40]}: {err_s}", "warn")
 
-        if to_unpin_count > 0:
-            candidates = sorted(
-                [x for x in pinned
-                 if str(x.get("item_id", "")) != iid
-                 and str(x.get("item_id", "")) not in self._unstick_blocked],
-                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0
-            )
-            removed = 0
-            for oldest in candidates:
-                if removed >= to_unpin_count:
-                    break
-                old_id = str(oldest.get("item_id", ""))
-                ok_u, err_u = unstick_item(token, old_id)
-                if ok_u:
-                    oldest["is_pinned"] = False
-                    oldest["is_sticky"] = False
-                    _set_pin_in_cache(old_id, False)
-                    broadcaster.emit(f"📌 [{name}][{tag}] знято: {oldest.get('title','?')[:40]}", "info")
-                    removed += 1
-                elif "[403]" in err_u:
-                    self._unstick_blocked.add(old_id)
-                    broadcaster.emit(f"⚠ [{name}][{tag}] {old_id} заблоковано для зняття (403), пропуск", "warn")
-                else:
-                    broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
-
-        # pin the just-bumped item
-        if not already_pinned and iid not in self._stick_blocked:
-            ok_s, err_s = stick_item(token, iid)
-            if ok_s:
-                it["is_pinned"] = True
-                it["is_sticky"] = True
-                _set_pin_in_cache(iid, True)
-                broadcaster.emit(f"📌 [{name}][{tag}] закріплено: {it.get('title','?')[:40]}", "ok")
-            elif "[403]" in err_s:
-                self._stick_blocked.add(iid)
-                broadcaster.emit(f"⚠ [{name}][{tag}] {iid} заблоковано для закріплення (403), пропуск", "warn")
+    def _unpin_oldest(self, token: str, name: str, tag: str, pinned: list[dict], count: int,
+                      icon: str, what: str) -> int:
+        """Unpin up to `count` lots, oldest bump first, moving on to the next lot when one fails."""
+        now = time.time()
+        removed = 0
+        for old in sorted(pinned, key=_bump_ts):
+            if removed >= count:
+                break
+            old_id = str(old.get("item_id", ""))
+            if self._unstick_blocked.get(old_id, 0) > now:
+                continue
+            title = old.get("title") or old.get("title_en") or f"#{old_id}"
+            ok_u, err_u = unstick_item(token, old_id)
+            if ok_u:
+                _set_cached_pin(tag, old_id, False)
+                removed += 1
+                broadcaster.emit(f"{icon} [{name}][{tag}] {what}: {title[:40]}", "info")
             else:
-                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось закріпити {iid}: {err_s}", "warn")
+                broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {title[:40]}: {err_u}", "warn")
+                if "[403]" not in err_u:
+                    break  # rate limit / network — retrying other lots now would fail the same way
+                self._unstick_blocked[old_id] = now + self.PIN_BLOCK_SEC
+        return removed
 
     def pin_cleanup_tick(self):
         """Every 15 min: fetch real pinned state from API, unpin excess oldest-first."""
@@ -814,39 +827,13 @@ class MarketEngine:
                 broadcaster.emit(f"⚠ [{name}][{tag}] pin_cleanup fetch: {e}", "warn")
                 continue
 
-            pinned = [x for x in items if _is_pinned(x)]
-            excess = len(pinned) - target
-            if excess <= 0:
-                continue
-
-            # sort pinned oldest refreshed_date first → unpin those
-            to_unpin = sorted(
-                pinned,
-                key=lambda x: x.get("refreshed_date") or x.get("bumped_at") or x.get("up_timestamp") or 0
-            )[:excess]
-
             with self._stick_lock:
-                for oldest in to_unpin:
-                    old_id = str(oldest.get("item_id", ""))
-                    title  = oldest.get("title") or oldest.get("title_en") or f"#{old_id}"
-                    ok_u, err_u = unstick_item(token, old_id)
-                    if ok_u:
-                        oldest["is_pinned"] = False
-                        oldest["is_sticky"] = False
-                        # update cache
-                        for cached_it in _tag_items_cache.get(tag.strip(), []):
-                            if str(cached_it.get("item_id", "")) == old_id:
-                                cached_it["is_pinned"] = False
-                                cached_it["is_sticky"] = False
-                                break
-                        broadcaster.emit(
-                            f"🧹 [{name}][{tag}] знято зайвий пін: {title[:40]} (було {len(pinned)}, ліміт {target})", "info"
-                        )
-                    elif "[403]" in err_u:
-                        self._unstick_blocked.add(old_id)
-                        broadcaster.emit(f"⚠ [{name}][{tag}] {old_id} заблоковано для зняття (403)", "warn")
-                    else:
-                        broadcaster.emit(f"⚠ [{name}][{tag}] не вдалось зняти {old_id}: {err_u}", "warn")
+                _sync_pins_to_cache(tag, items)
+                pinned = [x for x in items if _is_pinned(x)]
+                excess = len(pinned) - target
+                if excess > 0:
+                    self._unpin_oldest(token, name, tag, pinned, excess, "🧹",
+                                       f"знято зайвий пін (було {len(pinned)}, ліміт {target})")
 
 
 # ─── Scheduler manager ────────────────────────────────────────────────────────
@@ -939,15 +926,13 @@ class SchedulerManager:
                             cache[id_to_name[tid]].append(it)
                     elif isinstance(t, int) and t in id_to_name:
                         cache[id_to_name[t]].append(it)
-            # merge: preserve bumped_at set after bumps; refresh pin state from API
+            # merge: keep our newer bump time if the API lags; pin state always comes from API
             for tag_name, new_items in cache.items():
                 old_by_id = {str(x.get("item_id","")): x for x in _tag_items_cache.get(tag_name, [])}
                 for ni in new_items:
-                    iid = str(ni.get("item_id", ""))
-                    if iid in old_by_id:
-                        old = old_by_id[iid]
-                        if old.get("refreshed_date") or old.get("bumped_at"):
-                            ni["refreshed_date"] = old.get("refreshed_date") or old.get("bumped_at")
+                    old = old_by_id.get(str(ni.get("item_id", "")))
+                    if old and _bump_ts(old) > (ni.get("refreshed_date") or 0):
+                        ni["refreshed_date"] = _bump_ts(old)
             _tag_items_cache = cache
             _cache_loaded_at = datetime.now(_KYIV_TZ).strftime("%H:%M:%S")
             total = sum(len(v) for v in cache.values())
