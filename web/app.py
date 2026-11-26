@@ -143,10 +143,10 @@ def fetch_my_tags(token: str) -> list[str]:
             tags.append(t.strip())
     return sorted(set(tags))
 
-def fetch_tag_items_sorted(token: str, tag_id: int) -> list[dict]:
+def fetch_tag_items_sorted(token: str, tag_id: int, max_pages: int = 20) -> list[dict]:
     """Fetch active items for a tag sorted by oldest bump first (pdate_to_up)."""
     result, page = [], 1
-    while page <= 20:
+    while page <= max_pages:
         resp = requests.get(
             f"{API_BASE}/user/{MY_PROFILE_ID}/items",
             params={"show": "active", "order_by": "pdate_to_up",
@@ -386,6 +386,7 @@ class MarketEngine:
     """Runs refresh + bump for one market in background threads via APScheduler."""
 
     ITEM_COOLDOWN_SEC = 3600  # 1 hour cooldown after failed bump
+    EMPTY_TAG_PAUSE_SEC = 600  # tag with no lots: re-check in 10 min
 
     def __init__(self, cfg: dict, token_fn):
         self.cfg          = cfg
@@ -556,66 +557,68 @@ class MarketEngine:
             return
 
         now = time.time()
-
-        # --- 1 bump per tick: select current active tag, skip paused ones ---
         num_tags = len(tag_cfgs)
-        self._current_tag_idx = self._current_tag_idx % num_tags
+        start = self._current_tag_idx % num_tags
+        top_cache: list = []
 
-        # Try each tag in order starting from current; skip paused/unavailable ones
-        tag_cfg = tag = tag_id = bumps_quota = None
-        for _attempt in range(num_tags):
-            idx     = (self._current_tag_idx + _attempt) % num_tags
-            _tcfg   = tag_cfgs[idx]
-            _tag    = _tcfg.get("tag", "").strip()
-            _tag_id = _tag_id_map.get(_tag)
-            if not _tag_id:
-                broadcaster.emit(f"⚠ [{name}][{_tag}] tag_id не знайдено", "warn")
+        def top_ids():
+            if not top_cache:
+                try:
+                    listings = fetch_listings(url, token, top_n)
+                    top_cache.append({lot["id"] for lot in listings[:top_n]})
+                except Exception as e:
+                    if "429" not in str(e):
+                        broadcaster.emit(f"⚠ [{name}] top-N перевірка: {e}", "warn")
+                    top_cache.append(None)
+            return top_cache[0]
+
+        # 1 bump per tick: walk tags from the current one; paused / empty / all-on-cooldown tags are skipped
+        for attempt in range(num_tags):
+            idx    = (start + attempt) % num_tags
+            tcfg   = tag_cfgs[idx]
+            tag    = tcfg.get("tag", "").strip()
+            tag_id = _tag_id_map.get(tag)
+            if not tag_id:
+                broadcaster.emit(f"⚠ [{name}][{tag}] tag_id не знайдено — наступний тег", "warn")
                 continue
-            _pause = self._tag_pauses.get(_tag, 0)
-            if _pause > now:
-                mins_left = int((_pause - now) / 60)
-                broadcaster.emit(f"⏳ [{name}][{_tag}] пауза тегу ще {mins_left}хв — пропуск", "warn")
+            if self._tag_pauses.get(tag, 0) > now:
                 continue
-            # Found an available tag
-            tag_cfg     = _tcfg
-            tag         = _tag
-            tag_id      = _tag_id
-            bumps_quota = max(1, _tcfg.get("count", 1))
-            # Advance _current_tag_idx to this tag so next tick starts here
-            self._current_tag_idx = idx
-            break
+            if idx != self._current_tag_idx:
+                self._current_tag_idx = idx
+                self._tag_bump_count  = 0
+            if not self._bump_in_tag(token, name, tag, tag_id, max(1, tcfg.get("count", 1)), num_tags,
+                                     manual, now, top_ids if (url and top_n > 0) else None):
+                return
 
-        if tag is None:
-            broadcaster.emit(f"⏳ [{name}] всі теги на паузі — пропуск тіку", "warn")
-            return
+        soonest = min((p for p in (self._tag_pauses.get(t.get("tag", "").strip(), 0) for t in tag_cfgs)
+                       if p > now), default=0)
+        if soonest:
+            broadcaster.emit(f"⏳ [{name}] всі теги на паузі — найближчий через {int((soonest - now) // 60)}хв", "warn")
 
-        # top-N check: if our item already in top-N, skip this tick
-        if url and top_n > 0:
-            try:
-                listings = fetch_listings(url, token, top_n)
-                top_ids  = {lot["id"] for lot in listings[:top_n]}
-                my_ids_cache = {str(it.get("item_id","")) for it in items_for_tag(tag)}
-                if top_ids & my_ids_cache:
-                    broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{top_n}, пропуск", "ok")
-                    return
-            except Exception as e:
-                if "429" in str(e):
-                    pass  # rate limit on search — skip top-N check, proceed to bump
-                else:
-                    broadcaster.emit(f"⚠ [{name}][{tag}] top-N перевірка: {e}", "warn")
+    def _bump_in_tag(self, token: str, name: str, tag: str, tag_id: int, bumps_quota: int,
+                     num_tags: int, manual: bool, now: float, top_ids) -> bool:
+        """Bump one lot of `tag`. Returns True when the tag had nothing to bump and the next tag should be tried."""
+        global _api_limit_until
+        if top_ids:
+            ids = top_ids()
+            if ids and ids & {str(it.get("item_id", "")) for it in items_for_tag(tag)}:
+                broadcaster.emit(f"✅ [{name}][{tag}] вже в топ-{self.cfg.get('top_n', 1)}, пропуск", "ok")
+                return False
 
-        # fetch items sorted oldest-bumped-first from LOLZ API
+        # only the first page is needed: list is sorted oldest-bumped first
         try:
-            sorted_items = fetch_tag_items_sorted(token, tag_id)
+            sorted_items = fetch_tag_items_sorted(token, tag_id, max_pages=1)
         except Exception as e:
             broadcaster.emit(f"⚠ [{name}][{tag}] отримання лотів: {e}", "warn")
-            return
+            return False
 
         if not sorted_items:
-            broadcaster.emit(f"⚠ [{name}][{tag}] лоти не знайдено", "warn")
-            return
+            self._tag_pauses[tag] = now + self.EMPTY_TAG_PAUSE_SEC
+            broadcaster.emit(
+                f"⚠ [{name}][{tag}] лоти не знайдено — тег пропущено на {self.EMPTY_TAG_PAUSE_SEC // 60}хв", "warn")
+            return True
 
-        # Find the first item ready to bump (oldest with refreshed_date >= 60 min)
+        earliest = 0.0
         for it in sorted_items:
             iid   = str(it.get("item_id", ""))
             title = it.get("title") or it.get("title_en") or f"#{iid}"
@@ -623,26 +626,24 @@ class MarketEngine:
 
             pdate = it.get("refreshed_date") or it.get("pdate") or it.get("up_timestamp") or it.get("bumped_at") or 0
 
-            # pre-check: refreshed_date says bumped < 1h ago
-            if pdate and (now - pdate) < self.ITEM_COOLDOWN_SEC:
-                remaining = int(self.ITEM_COOLDOWN_SEC - (now - pdate))
-                self._cooldowns[iid] = now + remaining
-                self._cooldown_tags[iid] = tag
-                # oldest item not ready → pause whole tag
-                if it is sorted_items[0]:
-                    self._tag_pauses[tag] = now + remaining
-                    mins_left = remaining // 60
-                    broadcaster.emit(f"⏳ [{name}][{tag}] {lot_link} — ще {mins_left}хв кд, пауза тегу", "warn")
-                break
-
-            # in-memory cooldown (we bumped it this session)
-            if self._cooldowns.get(iid, 0) > now:
+            # in-memory cooldown (bumped or failed this session)
+            cd = self._cooldowns.get(iid, 0)
+            if cd > now:
+                earliest = min(earliest, cd) if earliest else cd
                 continue
+
+            # bumped < 1h ago → this and every fresher lot after it isn't ready
+            if pdate and (now - pdate) < self.ITEM_COOLDOWN_SEC:
+                ready_at = pdate + self.ITEM_COOLDOWN_SEC
+                self._cooldowns[iid] = ready_at
+                self._cooldown_tags[iid] = tag
+                earliest = min(earliest, ready_at) if earliest else ready_at
+                break
 
             # --- bump exactly 1 item ---
             with _bump_api_sem:
                 if _api_limit_until > time.time() and not manual:
-                    return
+                    return False
                 time.sleep(0.3)
                 ok, reason = bump_item(token, iid)
 
@@ -692,11 +693,18 @@ class MarketEngine:
                 broadcaster.emit(f"⛔ [{name}][{tag}] {lot_link} — {reason}", "error")
                 record_bump(name, tag, iid, title, False, reason)
                 if any(reason.startswith(f"[{c}]") for c in ("500","502","503","504")):
-                    return
+                    return False
                 self._cooldowns[iid] = now + self.ITEM_COOLDOWN_SEC
                 self._cooldown_tags[iid] = tag
 
-            break  # always exit after the first candidate — 1 bump per tick
+            return False  # 1 bump attempt per tick
+
+        until = earliest or (now + self.EMPTY_TAG_PAUSE_SEC)
+        self._tag_pauses[tag] = until
+        broadcaster.emit(
+            f"⏳ [{name}][{tag}] всі лоти на кд — пауза тегу {max(1, int((until - now) // 60))}хв, далі наступний тег",
+            "warn")
+        return True
 
     def _auto_stick_after_bump(self, token: str, name: str, tag: str, iid: str, it: dict):
         """After a successful bump, pin the bumped item and rotate oldest pinned out."""
@@ -786,8 +794,9 @@ class MarketEngine:
         if not tag_sticky:
             return
 
+        own_tags = {t.get("tag", "").strip() for t in self.cfg.get("tags", [])}
         for tag, target in tag_sticky.items():
-            if target <= 0:
+            if target <= 0 or tag.strip() not in own_tags:
                 continue
             tag_id = _tag_id_map.get(tag)
             if not tag_id:
